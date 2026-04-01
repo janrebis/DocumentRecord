@@ -24,7 +24,7 @@ namespace inz.Service
             _logger = logger;
         }
 
-        internal async Task<Guid> AddDocumentAsync(IFormFile file)
+        public async Task<Guid> AddDocumentAsync(IFormFile file)
         {
             var metadata = await ValidateInputDocument(file);
             var metadataSaved = false;
