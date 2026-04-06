@@ -2,6 +2,6 @@
 {
     public interface IDocumentContentStorage
     {
-        public Task<Object> AddDocumentToStorage(IFormFile file);
+        public Task AddDocumentToStorage(IFormFile file);
     }
 }
