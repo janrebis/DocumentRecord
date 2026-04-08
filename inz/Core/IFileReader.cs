@@ -1,4 +1,6 @@
-﻿namespace inz.Service
+﻿using inz.Service;
+
+namespace inz.Core
 {
     public interface IFileReader
     {

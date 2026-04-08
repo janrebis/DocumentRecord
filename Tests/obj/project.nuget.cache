@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "WaITQMo2XIw=",
+  "dgSpecHash": "H6nYwv/SCbw=",
   "success": true,
-  "projectFilePath": "C:\\Users\\jan.rebis\\source\\repos\\Tests\\Tests.csproj",
+  "projectFilePath": "C:\\Users\\jan.rebis\\source\\repos\\DocumentRecord\\Tests\\Tests.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\jan.rebis\\.nuget\\packages\\castle.core\\5.1.1\\castle.core.5.1.1.nupkg.sha512",
     "C:\\Users\\jan.rebis\\.nuget\\packages\\coverlet.collector\\6.0.4\\coverlet.collector.6.0.4.nupkg.sha512",

@@ -17,7 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DocumentRecord\inz.csproj" />
+    <ProjectReference Include="..\inz\inz.csproj" />
   </ItemGroup>
 
   <ItemGroup>

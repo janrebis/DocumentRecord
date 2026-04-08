@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\jan.rebis\\source\\repos\\Tests\\Tests.csproj": {}
+    "C:\\Users\\jan.rebis\\source\\repos\\DocumentRecord\\Tests\\Tests.csproj": {}
   },
   "projects": {
-    "C:\\Users\\jan.rebis\\source\\repos\\DocumentRecord\\inz.csproj": {
+    "C:\\Users\\jan.rebis\\source\\repos\\DocumentRecord\\inz\\inz.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\jan.rebis\\source\\repos\\DocumentRecord\\inz.csproj",
+        "projectUniqueName": "C:\\Users\\jan.rebis\\source\\repos\\DocumentRecord\\inz\\inz.csproj",
         "projectName": "inz",
-        "projectPath": "C:\\Users\\jan.rebis\\source\\repos\\DocumentRecord\\inz.csproj",
+        "projectPath": "C:\\Users\\jan.rebis\\source\\repos\\DocumentRecord\\inz\\inz.csproj",
         "packagesPath": "C:\\Users\\jan.rebis\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\jan.rebis\\source\\repos\\DocumentRecord\\obj\\",
+        "outputPath": "C:\\Users\\jan.rebis\\source\\repos\\DocumentRecord\\inz\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -506,14 +506,14 @@
         }
       }
     },
-    "C:\\Users\\jan.rebis\\source\\repos\\Tests\\Tests.csproj": {
+    "C:\\Users\\jan.rebis\\source\\repos\\DocumentRecord\\Tests\\Tests.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\jan.rebis\\source\\repos\\Tests\\Tests.csproj",
+        "projectUniqueName": "C:\\Users\\jan.rebis\\source\\repos\\DocumentRecord\\Tests\\Tests.csproj",
         "projectName": "Tests",
-        "projectPath": "C:\\Users\\jan.rebis\\source\\repos\\Tests\\Tests.csproj",
+        "projectPath": "C:\\Users\\jan.rebis\\source\\repos\\DocumentRecord\\Tests\\Tests.csproj",
         "packagesPath": "C:\\Users\\jan.rebis\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\jan.rebis\\source\\repos\\Tests\\obj\\",
+        "outputPath": "C:\\Users\\jan.rebis\\source\\repos\\DocumentRecord\\Tests\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -535,8 +535,8 @@
             "framework": "net10.0",
             "targetAlias": "net10.0",
             "projectReferences": {
-              "C:\\Users\\jan.rebis\\source\\repos\\DocumentRecord\\inz.csproj": {
-                "projectPath": "C:\\Users\\jan.rebis\\source\\repos\\DocumentRecord\\inz.csproj"
+              "C:\\Users\\jan.rebis\\source\\repos\\DocumentRecord\\inz\\inz.csproj": {
+                "projectPath": "C:\\Users\\jan.rebis\\source\\repos\\DocumentRecord\\inz\\inz.csproj"
               }
             }
           }

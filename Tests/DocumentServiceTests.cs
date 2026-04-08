@@ -1,6 +1,9 @@
-﻿using FluentAssertions;
+﻿using System.Reflection.Metadata;
+using System.Security.Cryptography;
+using FluentAssertions;
 using inz.Core;
 using inz.Core.DocumentExceptions;
+using inz.Models;
 using inz.Service;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
@@ -12,6 +15,25 @@ namespace inz.Tests
 
     public class DocumentServiceTests
     {
+
+        
+        
+
+        private readonly Mock<IDocumentRepository> _documentRepositoryMock = new();
+        private readonly Mock<IDocumentContentStorage> _storageMock = new();
+        private readonly Mock<IFileReader> _fileReaderMock = new();
+        private readonly Mock<ILogger<DocumentService>> _loggerMock = new();
+
+        private readonly DocumentService _documentService;
+
+        public DocumentServiceTests()
+        {
+            _documentService = new DocumentService(
+                _documentRepositoryMock.Object,
+                _storageMock.Object,
+                _fileReaderMock.Object,
+                _loggerMock.Object);
+        }
 
         #region AddDocumentTests
         /// <summary>
@@ -27,25 +49,6 @@ namespace inz.Tests
         /// 5. Jeśli nie powiedzie się dodanie dokumentu, to tworzymy log z błędem
         /// 9. Rzucany jest wyjątek o niedodaniu dokumentu 
         /// </summary>
-
-        private readonly Mock<IDocumentRepository> _documentRepositoryMock = new();
-        private readonly Mock<IDocumentContentStorage> _storageMock = new();
-        private readonly Mock<IFileReader> _fileReaderMock = new();
-        private readonly Mock<ILogger<DocumentService>> _loggerMock = new();
-
-        private readonly DocumentService _sut;
-
-        public DocumentServiceTests()
-        {
-            _sut = new DocumentService(
-                _documentRepositoryMock.Object,
-                _storageMock.Object,
-                _fileReaderMock.Object,
-                _loggerMock.Object);
-        }
-
-        #region AddDocumentTests
-
         [Fact]
         public async Task AddDocumentAsync_ShouldAddMetadataAndUploadFile_WhenInputIsValid()
         {
@@ -70,7 +73,7 @@ namespace inz.Tests
                 .Returns(Task.CompletedTask);
 
             // Act
-            var result = await _sut.AddDocumentAsync(file);
+            var result = await _documentService.AddDocumentAsync(file);
 
             // Assert
             result.Should().Be(metadata.Id);
@@ -114,7 +117,7 @@ namespace inz.Tests
                 .Returns(Task.CompletedTask);
 
             // Act
-            await _sut.AddDocumentAsync(file);
+            await _documentService.AddDocumentAsync(file);
 
             // Assert
             _documentRepositoryMock.Verify(x =>
@@ -151,7 +154,7 @@ namespace inz.Tests
                 .Returns(Task.CompletedTask);
 
             // Act
-            Func<Task> act = async () => await _sut.AddDocumentAsync(file);
+            Func<Task> act = async () => await _documentService.AddDocumentAsync(file);
 
             // Assert
             await act.Should().ThrowAsync<DocumentProcessingFailure>();
@@ -178,7 +181,7 @@ namespace inz.Tests
                 .ThrowsAsync(repositoryException);
 
             // Act
-            Func<Task> act = async () => await _sut.AddDocumentAsync(file);
+            Func<Task> act = async () => await _documentService.AddDocumentAsync(file);
 
             // Assert
             await act.Should().ThrowAsync<DocumentProcessingFailure>();
@@ -215,7 +218,7 @@ namespace inz.Tests
                 .Returns(Task.CompletedTask);
 
             // Act
-            Func<Task> act = async () => await _sut.AddDocumentAsync(file);
+            Func<Task> act = async () => await _documentService.AddDocumentAsync(file);
 
             // Assert
             var exception = await act.Should().ThrowAsync<DocumentProcessingFailure>();
@@ -227,7 +230,7 @@ namespace inz.Tests
         public async Task AddDocumentAsync_ShouldThrowArgumentNullException_WhenFileIsNull()
         {
             // Act
-            Func<Task> act = async () => await _sut.AddDocumentAsync(null!);
+            Func<Task> act = async () => await _documentService.AddDocumentAsync(null!);
 
             // Assert
             await act.Should().ThrowAsync<ArgumentNullException>();
@@ -244,7 +247,7 @@ namespace inz.Tests
             var file = CreateFormFile("empty.pdf", string.Empty);
 
             // Act
-            Func<Task> act = async () => await _sut.AddDocumentAsync(file);
+            Func<Task> act = async () => await _documentService.AddDocumentAsync(file);
 
             // Assert
             await act.Should().ThrowAsync<EmptyDocumentException>();
@@ -261,7 +264,7 @@ namespace inz.Tests
             var file = CreateFormFile("malware.exe", "fake content");
 
             // Act
-            Func<Task> act = async () => await _sut.AddDocumentAsync(file);
+            Func<Task> act = async () => await _documentService.AddDocumentAsync(file);
 
             // Assert
             await act.Should().ThrowAsync<UnsupportedDocumentTypeException>();
@@ -273,6 +276,110 @@ namespace inz.Tests
 
         #endregion
 
+        #region GetDocumentByIdTests
+        /// Założenia:
+        /// 1. Dokument jest wwyszukiwany po identyfikatorze przekazanym w metodzie
+        /// 2. Pobierane są metadane z sql
+        /// 3. Jeśli nie znaleziono, to zwracamy DocumentNotFoundException
+        /// 4. Jeśli znaleziono, ale status jest inny niż Available, to zwracamy DocumentUnavailableException
+        /// 5. Jeśli dokument znaleziony i jest available, to pobieramy zawartość z Azure Blob i zwraacamy strumnieć
+        /// 6. Jeśli wystąpi błąd podczas pobierania, to rzucamy DoocumentRetrievalFailureException
+        /// 7. Jeśli wszystko poprawnie, to zwracamy strumień dokumentu
+
+        [Fact]
+        public async Task GetDocumentByIdAsync_ShouldThrowDocumentNotFoundException_WhenMetadataNotFound()
+        {
+            // Arrange
+            var documentId = Guid.NewGuid();
+
+            _documentRepositoryMock
+                .Setup(x => x.GetMetadaById(documentId))
+                .ReturnsAsync((FileMetadata)null);
+
+            // Act
+            Func<Task> act = async () =>
+                await _documentService.GetDocumentByIdAsync(documentId);
+
+            // Assert
+            await act.Should().ThrowAsync<DocumentNotFoundException>();
+        }
+
+        [Theory]
+        [InlineData(ProcessStatus.PROCESSING)]
+        [InlineData(ProcessStatus.FAILED)]
+        public async Task GetDocumentByIdAsync_ShouldThrowDocumentUnavailableException_WhenStatusIsNotAvailable(ProcessStatus status)
+        {
+            // Arrange
+            var metadata = CreateMetadata();
+            var documentId = metadata.Id();
+            metadata.ProcessingStatus = status;
+
+            _documentRepositoryMock
+                .Setup(x => x.GetMetadaById(documentId))
+                .ReturnsAsync(metadata);
+
+            // Act
+            Func<Task> act = async () =>
+                await _documentService.GetDocumentByIdAsync(documentId);
+
+            // Assert
+            await act.Should().ThrowAsync<DocumentUnavailableException>();
+        }
+
+        [Fact]
+        public async Task GetDocumentByIdAsync_ShouldThrowDocumentRetrievalFailureException_WhenStorageFails()
+        {
+            // Arrange
+            var metadata = CreateMetadata();
+            metadata.ProcessingStatus = ProcessStatus.AVAILABLE;
+            var documentId = metadata.Id;
+
+            _documentRepositoryMock
+                .Setup(x => x.GetMetadaById(documentId))
+                .ReturnsAsync(metadata);
+
+            _storageMock
+                .Setup(x => x.GetDocumentStream(documentId))
+                .ThrowsAsync(new Exception("Blob failure"));
+
+            // Act
+            Func<Task> act = async () =>
+                await _documentService.GetDocumentByIdAsync(documentId);
+
+            // Assert
+            _storageMock.Verify(x => x.GetDocumentStream(documentId), Times.Once);
+            await act.Should().ThrowAsync<DocumentRetrievalFailureException>();
+        }
+
+        [Fact]
+        public async Task GetDocumentByIdAsync_ShouldReturnStream_WhenFileIsAvailable()
+        {
+            // Arrange
+            var metadata = CreateMetadata();
+            metadata.ProcessingStatus = ProcessStatus.AVAILABLE;
+            var documentId = metadata.Id;
+            var expectedStream = new MemoryStream();
+
+            _documentRepositoryMock
+                .Setup(x => x.GetMetadaById(documentId))
+                .ReturnsAsync(metadata);
+
+            _storageMock
+                .Setup(x => x.GetDocumentStream(documentId))
+                .ReturnsAsync(expectedStream);
+
+            // Act
+            var result = await _documentService.GetDocumentByIdAsync(documentId);
+
+            // Assert
+            result.Should().NotBeNull();
+            result.Should().BeSameAs(expectedStream);
+
+            _documentRepositoryMock.Verify(x => x.GetMetadaById(documentId), Times.Once);
+            _storageMock.Verify(x => x.GetDocumentStream(documentId), Times.Once);
+        }
+
+        #endregion
         #region AddDocumentRegionsPrivateMethods
         private static IFormFile CreateFormFile(string fileName, string content = "sample content")
         {
@@ -292,9 +399,9 @@ namespace inz.Tests
             {
                 ProcessingStatus = ProcessStatus.PROCESSING
             };
-        }
-        #endregion
 
+        }
     }
+    #endregion
 
 }

@@ -1,4 +1,4 @@
-﻿using inz.Core;
+﻿using inz.Models;
 
 namespace inz.Service
 {

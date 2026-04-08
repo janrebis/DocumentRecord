@@ -1,5 +1,7 @@
-﻿using inz.Core;
+﻿using System.Security.Cryptography.X509Certificates;
+using inz.Core;
 using inz.Core.DocumentExceptions;
+using inz.Models;
 
 namespace inz.Service
 {
@@ -23,7 +25,7 @@ namespace inz.Service
             _fileReader = fileReader;
             _logger = logger;
         }
-
+        #region AddDocumentAsync
         public async Task<Guid> AddDocumentAsync(IFormFile file)
         {
             var metadata = await ValidateInputDocument(file);
@@ -37,22 +39,31 @@ namespace inz.Service
                 metadata.ProcessingStatus = ProcessStatus.PROCESSING;
                 await _documentRepository.AddDocumentMetadata(metadata);
                 metadataSaved = true;
-                
+
                 await _storage.AddDocumentToStorage(file);
                 await _documentRepository.UpdateMetadataProcessingStatus(metadata.Id, ProcessStatus.AVAILABLE);
                 _logger.LogInformation("{FileName}: Zakończono dodawanie dokumentu. Jest teraz w pełni dostępny", fileName);
             }
 
-            catch (Exception e){
-                if(metadataSaved) await _documentRepository.UpdateMetadataProcessingStatus(metadata.Id, ProcessStatus.FAILED);
+            catch (Exception e)
+            {
+                if (metadataSaved) await _documentRepository.UpdateMetadataProcessingStatus(metadata.Id, ProcessStatus.FAILED);
 
                 _logger.LogError(e, "{FileName}: Dodawanie dokumentu zakończono błędem", fileName);
                 throw new DocumentProcessingFailure(" Wystąpił błąd podczas dodawania dokumentu.", fileName, e);
             }
 
             return metadata.Id;
-
         }
+        #endregion
+        #region GetDocumentById
+        public async Task<Stream> GetDocumentById(Guid documentId) {
+            throw new NotImplementedException();
+        }
+        #endregion
+
+        #region privateMethods
+
 
         private async Task<FileMetadata> ValidateInputDocument(IFormFile file) {
 
@@ -66,7 +77,8 @@ namespace inz.Service
             //TODO: dodać implementacje ReadFile, aby zwracało poprawne metadane, ustawiam domyślnie status processing w Modelu obiektu
             return await _fileReader.ReadFile(file);
         }
-        
+        #endregion
+
 
 
 
