@@ -28,11 +28,11 @@ namespace inz.Service
         #region AddDocumentAsync
         public async Task<Guid> AddDocumentAsync(IFormFile file)
         {
-            var metadata = await ValidateInputDocument(file);
+            var metadata = await ValidateInputDocumentMetadata(file);
             var metadataSaved = false;
-            var fileName = file.FileName;
+            var documentName = metadata.DocumentName;
 
-            _logger.LogInformation("{FileName}: Rozpoczęto dodawanie dokumentu", file.FileName);
+            _logger.LogInformation($"{documentName}: Rozpoczęto dodawanie dokumentu", documentName);
 
             try
             {
@@ -42,15 +42,15 @@ namespace inz.Service
 
                 await _storage.AddDocumentToStorage(file);
                 await _documentRepository.UpdateMetadataProcessingStatus(metadata.Id, ProcessStatus.AVAILABLE);
-                _logger.LogInformation($"{fileName}: Zakończono dodawanie dokumentu. Jest teraz w pełni dostępny", fileName);
+                _logger.LogInformation($"{documentName}: Zakończono dodawanie dokumentu. Jest teraz w pełni dostępny", documentName);
             }
 
             catch (Exception e)
             {
                 if (metadataSaved) await _documentRepository.UpdateMetadataProcessingStatus(metadata.Id, ProcessStatus.FAILED);
 
-                _logger.LogError(e, $"{fileName}: Dodawanie dokumentu zakończono błędem", fileName);
-                throw new DocumentProcessingFailure($"{fileName}: Wystąpił błąd podczas dodawania dokumentu.", fileName, e);
+                _logger.LogError(e, $"{documentName}: Dodawanie dokumentu zakończono błędem", documentName);
+                throw new DocumentProcessingFailure($"{documentName}: Wystąpił błąd podczas dodawania dokumentu.", documentName, e);
             }
 
             return metadata.Id;
@@ -74,7 +74,7 @@ namespace inz.Service
         #endregion
 
         #region privateMethods
-        private async Task<DocumentMetadata> ValidateInputDocument(IFormFile file) {
+        private async Task<DocumentMetadata> ValidateInputDocumentMetadata(IFormFile file) {
 
             if (file == null) throw new ArgumentNullException(nameof(file), "Nie przekazano żadnego pliku");
             if (file.Length == 0) throw new EmptyDocumentException("Plik jest pusty");

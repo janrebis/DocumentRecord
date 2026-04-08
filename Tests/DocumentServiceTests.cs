@@ -383,6 +383,133 @@ namespace inz.Tests
         }
 
         #endregion
+
+        #region DeleteDocumentTests
+        /// Założenia:
+        /// Rozdzielam odpowiedzialności na oznaczenie dokumentu do usunięcia, wykonany osobnym metodą MarkDocumentToDeletAsync, który ustawia status documentu na MARKED_TO_DELETE, oraz metoda DeleteDocument, która usuwa fizycznie dokument
+        /// Metoda DeleteDocument:
+        /// 1. Dostaje jako parametr identyfikator metadanych
+        /// 2. Sprawdza czy metadane są w SQL
+        /// 3. Sprawdza czy metoda jest oznaczona jako MARKED_TO_DELETE, jeśli nie to zwracam DocumentWrongStatusException
+        /// 4. Wyszukuje dokument w Blob
+        /// 5. Jeśli nie znajde dokumentu, to zakładam że jest już usuniętyy, zmieniam status na DELETED i kończę
+        /// 6. Jeśli znajdzie, to usuwam dokument z Blob, aktualizuję status na DELETED
+        /// 7. Jeśli nie uda się usunąć z Blob, oznaczam jako DELETE_FAILED, robie log (na ten moment daje new DocumentDeletionFailureException, ale docelowo obsługa Retry)
+
+
+        [Theory]
+        [InlineData(ProcessStatus.PROCESSING)]
+        [InlineData(ProcessStatus.FAILED)]
+        [InlineData(ProcessStatus.AVAILABLE)]
+        public async Task DeleteDocumentAsync_ShouldThrowDocumentWrongStatusException_WhenStatusOtherThanMarkedToDelete(ProcessStatus status)
+        {
+            // Arrange
+            var metadata = CreateMetadata();
+            metadata.ProcessingStatus = status;
+
+            _documentRepositoryMock
+                .Setup(x => x.GetMetadaById(metadata.Id))
+                .ReturnsAsync(metadata);
+                
+            //Act
+            Func<Task> act = async () => await _documentService.DeleteDocumentAsync(metadata.Id);
+
+            //Assert
+            await act.Should().ThrowAsync<DocumentWrongStatusException>();
+            _storageMock.Verify(x => x.DeleteAsync(It.IsAny<string>()), Times.Never); //bo sprawdzam czy nie poszło dalej 
+        }
+
+        [Fact]
+        public async Task DeleteDocumentAsync_ShouldSetStatusToDeleted_WhenDocumentIsAlreadyDeletedInBlob()
+        {
+            // Arrange
+            var metadata = CreateMetadata();
+            metadata.ProcessingStatus = ProcessStatus.MARKED_TO_DELETE;
+            var documentId = metadata.Id;
+            var blobKey = "Blob";
+            metadata.BlobKey = blobKey;
+
+            _documentRepositoryMock
+                .Setup(x => x.GetMetadaById(documentId))
+                .ReturnsAsync(metadata);
+
+            _storageMock
+                .Setup(x => x.ExistsAsync(blobKey))
+                .ReturnAsync(false); // zakładam, że dokument już jest usunięty w Blob
+
+            _documentRepositoryMock
+                .Setup(x => x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.DELETED))
+                .Returns(Task.CompletedTask);
+
+            // Act
+            await _documentService.DeleteDocumentAsync(documentId);
+
+            // Assert
+            _storageMock.Verify(x => x.DeleteAsync(blobKey), Times.Once);
+            _documentRepositoryMock.Verify(x =>
+                x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.DELETED),
+                Times.Once);
+        }
+
+        [Fact]
+        public async Task DeleteDocumentAsync_ShouldThrowDocumentDeletionFailureException_WhenBlobDeletionFails()
+        {
+            // Arrange
+            var metadata = CreateMetadata();
+            metadata.ProcessingStatus = ProcessStatus.MARKED_TO_DELETE;
+            var documentId = metadata.Id;
+            var blobKey = "Blob";
+            metadata.BlobKey = blobKey;
+
+            _documentRepositoryMock
+                .Setup(x => x.GetMetadaById(documentId))
+                .ReturnsAsync(metadata);
+
+            _storageMock
+                .Setup(x => x.ExistsAsync(blobKey))
+                .ThrowsAsync(new Exception("Blob deletion failed"));
+
+            // Act
+            Func<Task> act = async () => await _documentService.DeleteDocumentAsync(documentId);
+
+            // Assert
+            await act.Should().ThrowAsync<DocumentDeletionFailureException>();
+            _storageMock.Verify(x => x.DeleteAsync(blobKey), Times.Once);
+        }
+
+        [Fact]
+        public async Task DeleteDocumentAsync_ShouldSetStatusToDeleted_WhenBlobDeletionSucceeds()
+        {
+            // Arrange
+            var metadata = CreateMetadata();
+            metadata.ProcessingStatus = ProcessStatus.MARKED_TO_DELETE;
+            var documentId = metadata.Id;
+            var blobKey = "Blob";
+            metadata.BlobKey = blobKey;
+
+            _documentRepositoryMock
+                .Setup(x => x.GetMetadaById(documentId))
+                .ReturnsAsync(metadata);
+
+            _storageMock
+                .Setup(x => x.DeleteAsync(blobKey))
+                .Returns(Task.CompletedTask);
+
+            _documentRepositoryMock
+                .Setup(x => x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.DELETED))
+                .Returns(Task.CompletedTask);
+
+            // Act
+            await _documentService.DeleteDocumentAsync(documentId);
+
+            // Assert
+            _storageMock.Verify(x => x.DeleteAsync(blobKey), Times.Once);
+            _documentRepositoryMock.Verify(x =>
+                x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.DELETED),
+                Times.Once);
+        }
+        #endregion
+
         #region AddDocumentRegionsPrivateMethods
         private static IFormFile CreateFormFile(string fileName, string content = "sample content")
         {
