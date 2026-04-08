@@ -56,8 +56,8 @@ namespace inz.Service
             return metadata.Id;
         }
         #endregion
-        #region GetDocumentById
-        public async Task<Stream> GetDocumentById(Guid documentId) {
+        #region GetDocumentByIdAsync
+        public async Task<Stream> GetDocumentByIdAsync(Guid documentId) {
             throw new NotImplementedException();
         }
         #endregion

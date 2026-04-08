@@ -294,7 +294,7 @@ namespace inz.Tests
 
             _documentRepositoryMock
                 .Setup(x => x.GetMetadaById(documentId))
-                .ReturnsAsync((FileMetadata)null);
+                .ReturnsAsync((FileMetadata?)null);
 
             // Act
             Func<Task> act = async () =>
@@ -311,7 +311,7 @@ namespace inz.Tests
         {
             // Arrange
             var metadata = CreateMetadata();
-            var documentId = metadata.Id();
+            var documentId = metadata.Id;
             metadata.ProcessingStatus = status;
 
             _documentRepositoryMock

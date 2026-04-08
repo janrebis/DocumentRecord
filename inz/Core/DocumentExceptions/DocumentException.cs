@@ -32,4 +32,19 @@
             FileName = fileName;
         }
     }
+
+    public class DocumentNotFoundException : DocumentException
+    {
+        public DocumentNotFoundException(string message) : base(message) { }
+    }
+
+    public class DocumentUnavailableException : DocumentException
+    {
+        public DocumentUnavailableException(string message) : base(message) { }
+    }
+
+    public class DocumentRetrievalFailureException : DocumentException
+    {
+        public DocumentRetrievalFailureException(string message) : base(message) { }
+    }
 }
