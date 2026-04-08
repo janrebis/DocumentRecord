@@ -42,30 +42,39 @@ namespace inz.Service
 
                 await _storage.AddDocumentToStorage(file);
                 await _documentRepository.UpdateMetadataProcessingStatus(metadata.Id, ProcessStatus.AVAILABLE);
-                _logger.LogInformation("{FileName}: Zakończono dodawanie dokumentu. Jest teraz w pełni dostępny", fileName);
+                _logger.LogInformation($"{fileName}: Zakończono dodawanie dokumentu. Jest teraz w pełni dostępny", fileName);
             }
 
             catch (Exception e)
             {
                 if (metadataSaved) await _documentRepository.UpdateMetadataProcessingStatus(metadata.Id, ProcessStatus.FAILED);
 
-                _logger.LogError(e, "{FileName}: Dodawanie dokumentu zakończono błędem", fileName);
-                throw new DocumentProcessingFailure(" Wystąpił błąd podczas dodawania dokumentu.", fileName, e);
+                _logger.LogError(e, $"{fileName}: Dodawanie dokumentu zakończono błędem", fileName);
+                throw new DocumentProcessingFailure($"{fileName}: Wystąpił błąd podczas dodawania dokumentu.", fileName, e);
             }
 
             return metadata.Id;
         }
         #endregion
         #region GetDocumentByIdAsync
-        public async Task<Stream> GetDocumentByIdAsync(Guid documentId) {
-            throw new NotImplementedException();
+        public async Task<Stream> GetDocumentByIdAsync(Guid documentId)
+        {
+            var metadata = await _documentRepository.GetMetadaById(documentId);
+            ValidateMetadata(metadata);
+
+            try
+            {
+                return await _storage.GetDocumentStream(metadata.BlobKey);
+            }
+            catch (Exception ex)
+            {
+                throw new DocumentRetrievalFailureException($"{metadata.DocumentName}: Nie udało się pobrać dokumentu.", metadata.DocumentName, ex);
+            }
         }
         #endregion
 
         #region privateMethods
-
-
-        private async Task<FileMetadata> ValidateInputDocument(IFormFile file) {
+        private async Task<DocumentMetadata> ValidateInputDocument(IFormFile file) {
 
             if (file == null) throw new ArgumentNullException(nameof(file), "Nie przekazano żadnego pliku");
             if (file.Length == 0) throw new EmptyDocumentException("Plik jest pusty");
@@ -76,6 +85,12 @@ namespace inz.Service
 
             //TODO: dodać implementacje ReadFile, aby zwracało poprawne metadane, ustawiam domyślnie status processing w Modelu obiektu
             return await _fileReader.ReadFile(file);
+        }
+
+        private void ValidateMetadata(DocumentMetadata? documentMetadata)
+        {
+            if (documentMetadata is null) throw new DocumentNotFoundException("Nie znaleziono szukanego dokumentu.");
+            if (documentMetadata.ProcessingStatus != ProcessStatus.AVAILABLE) throw new DocumentUnavailableException($"{documentMetadata.DocumentName}: Dokument aktualnie nie jest dostępny", documentMetadata.DocumentName);
         }
         #endregion
 

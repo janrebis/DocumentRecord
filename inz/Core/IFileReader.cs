@@ -4,6 +4,6 @@ namespace inz.Core
 {
     public interface IFileReader
     {
-        public Task<FileMetadata> ReadFile(IFormFile file);
+        public Task<DocumentMetadata> ReadFile(IFormFile file);
     }
 }

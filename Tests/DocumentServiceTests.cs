@@ -61,7 +61,7 @@ namespace inz.Tests
                 .ReturnsAsync(metadata);
 
             _documentRepositoryMock
-                .Setup(x => x.AddDocumentMetadata(It.IsAny<FileMetadata>()))
+                .Setup(x => x.AddDocumentMetadata(It.IsAny<DocumentMetadata>()))
                 .Returns(Task.CompletedTask);
 
             _storageMock
@@ -81,7 +81,7 @@ namespace inz.Tests
             _fileReaderMock.Verify(x => x.ReadFile(file), Times.Once);
 
             _documentRepositoryMock.Verify(x =>
-                x.AddDocumentMetadata(It.Is<FileMetadata>(m =>
+                x.AddDocumentMetadata(It.Is<DocumentMetadata>(m =>
                     m.Id == metadata.Id &&
                     m.ProcessingStatus == ProcessStatus.PROCESSING)),
                 Times.Once);
@@ -105,7 +105,7 @@ namespace inz.Tests
                 .ReturnsAsync(metadata);
 
             _documentRepositoryMock
-                .Setup(x => x.AddDocumentMetadata(It.IsAny<FileMetadata>()))
+                .Setup(x => x.AddDocumentMetadata(It.IsAny<DocumentMetadata>()))
                 .Returns(Task.CompletedTask);
 
             _storageMock
@@ -142,7 +142,7 @@ namespace inz.Tests
                 .ReturnsAsync(metadata);
 
             _documentRepositoryMock
-                .Setup(x => x.AddDocumentMetadata(It.IsAny<FileMetadata>()))
+                .Setup(x => x.AddDocumentMetadata(It.IsAny<DocumentMetadata>()))
                 .Returns(Task.CompletedTask);
 
             _storageMock
@@ -177,7 +177,7 @@ namespace inz.Tests
                 .ReturnsAsync(metadata);
 
             _documentRepositoryMock
-                .Setup(x => x.AddDocumentMetadata(It.IsAny<FileMetadata>()))
+                .Setup(x => x.AddDocumentMetadata(It.IsAny<DocumentMetadata>()))
                 .ThrowsAsync(repositoryException);
 
             // Act
@@ -206,7 +206,7 @@ namespace inz.Tests
                 .ReturnsAsync(metadata);
 
             _documentRepositoryMock
-                .Setup(x => x.AddDocumentMetadata(It.IsAny<FileMetadata>()))
+                .Setup(x => x.AddDocumentMetadata(It.IsAny<DocumentMetadata>()))
                 .Returns(Task.CompletedTask);
 
             _storageMock
@@ -236,7 +236,7 @@ namespace inz.Tests
             await act.Should().ThrowAsync<ArgumentNullException>();
 
             _fileReaderMock.Verify(x => x.ReadFile(It.IsAny<IFormFile>()), Times.Never);
-            _documentRepositoryMock.Verify(x => x.AddDocumentMetadata(It.IsAny<FileMetadata>()), Times.Never);
+            _documentRepositoryMock.Verify(x => x.AddDocumentMetadata(It.IsAny<DocumentMetadata>()), Times.Never);
             _storageMock.Verify(x => x.AddDocumentToStorage(It.IsAny<IFormFile>()), Times.Never);
         }
 
@@ -253,7 +253,7 @@ namespace inz.Tests
             await act.Should().ThrowAsync<EmptyDocumentException>();
 
             _fileReaderMock.Verify(x => x.ReadFile(It.IsAny<IFormFile>()), Times.Never);
-            _documentRepositoryMock.Verify(x => x.AddDocumentMetadata(It.IsAny<FileMetadata>()), Times.Never);
+            _documentRepositoryMock.Verify(x => x.AddDocumentMetadata(It.IsAny<DocumentMetadata>()), Times.Never);
             _storageMock.Verify(x => x.AddDocumentToStorage(It.IsAny<IFormFile>()), Times.Never);
         }
 
@@ -270,7 +270,7 @@ namespace inz.Tests
             await act.Should().ThrowAsync<UnsupportedDocumentTypeException>();
 
             _fileReaderMock.Verify(x => x.ReadFile(It.IsAny<IFormFile>()), Times.Never);
-            _documentRepositoryMock.Verify(x => x.AddDocumentMetadata(It.IsAny<FileMetadata>()), Times.Never);
+            _documentRepositoryMock.Verify(x => x.AddDocumentMetadata(It.IsAny<DocumentMetadata>()), Times.Never);
             _storageMock.Verify(x => x.AddDocumentToStorage(It.IsAny<IFormFile>()), Times.Never);
         }
 
@@ -294,7 +294,7 @@ namespace inz.Tests
 
             _documentRepositoryMock
                 .Setup(x => x.GetMetadaById(documentId))
-                .ReturnsAsync((FileMetadata?)null);
+                .ReturnsAsync((DocumentMetadata?)null);
 
             // Act
             Func<Task> act = async () =>
@@ -333,13 +333,15 @@ namespace inz.Tests
             var metadata = CreateMetadata();
             metadata.ProcessingStatus = ProcessStatus.AVAILABLE;
             var documentId = metadata.Id;
+            metadata.BlobKey = "Blob";
+            var blobKey = metadata.BlobKey;
 
             _documentRepositoryMock
                 .Setup(x => x.GetMetadaById(documentId))
                 .ReturnsAsync(metadata);
 
             _storageMock
-                .Setup(x => x.GetDocumentStream(documentId))
+                .Setup(x => x.GetDocumentStream(blobKey))
                 .ThrowsAsync(new Exception("Blob failure"));
 
             // Act
@@ -347,7 +349,6 @@ namespace inz.Tests
                 await _documentService.GetDocumentByIdAsync(documentId);
 
             // Assert
-            _storageMock.Verify(x => x.GetDocumentStream(documentId), Times.Once);
             await act.Should().ThrowAsync<DocumentRetrievalFailureException>();
         }
 
@@ -358,6 +359,8 @@ namespace inz.Tests
             var metadata = CreateMetadata();
             metadata.ProcessingStatus = ProcessStatus.AVAILABLE;
             var documentId = metadata.Id;
+            var blobKey = "Blob";
+            metadata.BlobKey = blobKey;
             var expectedStream = new MemoryStream();
 
             _documentRepositoryMock
@@ -365,7 +368,7 @@ namespace inz.Tests
                 .ReturnsAsync(metadata);
 
             _storageMock
-                .Setup(x => x.GetDocumentStream(documentId))
+                .Setup(x => x.GetDocumentStream(blobKey))
                 .ReturnsAsync(expectedStream);
 
             // Act
@@ -376,7 +379,7 @@ namespace inz.Tests
             result.Should().BeSameAs(expectedStream);
 
             _documentRepositoryMock.Verify(x => x.GetMetadaById(documentId), Times.Once);
-            _storageMock.Verify(x => x.GetDocumentStream(documentId), Times.Once);
+            _storageMock.Verify(x => x.GetDocumentStream(blobKey), Times.Once);
         }
 
         #endregion
@@ -393,9 +396,9 @@ namespace inz.Tests
             };
         }
 
-        private static FileMetadata CreateMetadata()
+        private static DocumentMetadata CreateMetadata()
         {
-            return new FileMetadata
+            return new DocumentMetadata
             {
                 ProcessingStatus = ProcessStatus.PROCESSING
             };

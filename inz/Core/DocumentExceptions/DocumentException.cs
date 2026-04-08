@@ -24,12 +24,13 @@
 
     public class DocumentProcessingFailure : DocumentException
     {
-        public string FileName { get; }
-
-        public DocumentProcessingFailure(string message, string fileName, Exception innerException)
+        public string DocumentName { get; }
+        public Exception InnerException { get; }
+        public DocumentProcessingFailure(string message, string documentName, Exception innerException)
             : base(message, innerException)
         {
-            FileName = fileName;
+            DocumentName = documentName;
+            InnerException = innerException;
         }
     }
 
@@ -40,11 +41,21 @@
 
     public class DocumentUnavailableException : DocumentException
     {
-        public DocumentUnavailableException(string message) : base(message) { }
+        public string DocumentName { get; }
+        public DocumentUnavailableException(string message, string documentName) : base(message)
+        {
+            DocumentName = documentName;
+        }
     }
 
     public class DocumentRetrievalFailureException : DocumentException
     {
-        public DocumentRetrievalFailureException(string message) : base(message) { }
+        public string DocumentName { get; }
+        public Exception InnerException { get; }
+        public DocumentRetrievalFailureException(string message, string documentName, Exception innerException) : base(message)
+        {
+            DocumentName = documentName;
+            InnerException = innerException;
+        }
     }
 }

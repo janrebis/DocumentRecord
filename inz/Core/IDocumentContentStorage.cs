@@ -6,6 +6,6 @@ namespace inz.Service
     {
         public Task AddDocumentToStorage(IFormFile file);
 
-        public Task<Stream> GetDocumentStream(Guid id);
+        public Task<Stream> GetDocumentStream(string BlokKey);
     }
 }
