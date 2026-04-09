@@ -5,7 +5,8 @@ namespace inz.Service
     public interface IDocumentContentStorage
     {
         public Task AddDocumentToStorage(IFormFile file);
-
         public Task<Stream> GetDocumentStream(string BlokKey);
+        public Task DeleteAsync(string BlobKey);
+        public Task<bool> ExistsAsync(string BlobKey);
     }
 }

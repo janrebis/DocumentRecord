@@ -298,7 +298,7 @@ namespace inz.Tests
 
             // Act
             Func<Task> act = async () =>
-                await _documentService.GetDocumentByIdAsync(documentId);
+                await _documentService.GetDocumentMetadataByIdAsync(documentId);
 
             // Assert
             await act.Should().ThrowAsync<DocumentNotFoundException>();
@@ -320,7 +320,7 @@ namespace inz.Tests
 
             // Act
             Func<Task> act = async () =>
-                await _documentService.GetDocumentByIdAsync(documentId);
+                await _documentService.GetDocumentMetadataByIdAsync(documentId);
 
             // Assert
             await act.Should().ThrowAsync<DocumentUnavailableException>();
@@ -346,7 +346,7 @@ namespace inz.Tests
 
             // Act
             Func<Task> act = async () =>
-                await _documentService.GetDocumentByIdAsync(documentId);
+                await _documentService.GetDocumentMetadataByIdAsync(documentId);
 
             // Assert
             await act.Should().ThrowAsync<DocumentRetrievalFailureException>();
@@ -372,7 +372,7 @@ namespace inz.Tests
                 .ReturnsAsync(expectedStream);
 
             // Act
-            var result = await _documentService.GetDocumentByIdAsync(documentId);
+            var result = await _documentService.GetDocumentMetadataByIdAsync(documentId);
 
             // Assert
             result.Should().NotBeNull();
@@ -435,7 +435,7 @@ namespace inz.Tests
 
             _storageMock
                 .Setup(x => x.ExistsAsync(blobKey))
-                .ReturnAsync(false); // zakładam, że dokument już jest usunięty w Blob
+                .ReturnsAsync(false); // zakładam, że dokument już jest usunięty w Blob
 
             _documentRepositoryMock
                 .Setup(x => x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.DELETED))

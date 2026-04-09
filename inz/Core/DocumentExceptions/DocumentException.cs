@@ -58,4 +58,23 @@
             InnerException = innerException;
         }
     }
+    public class DocumentWrongStatusException : DocumentException
+    {
+        public string DocumentName { get; }
+        public DocumentWrongStatusException(string message, string documentName) : base(message)
+        {
+            DocumentName = documentName;
+        }
+    }
+
+    public class DocumentDeletionFailureException : DocumentException
+    {
+        public string DocumentName { get; }
+        public Exception InnerException { get; }
+        public DocumentDeletionFailureException(string message, string documentName, Exception innerException) : base(message)
+        {
+            DocumentName = documentName;
+            InnerException = innerException;
+        }
+    }
 }

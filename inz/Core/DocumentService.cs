@@ -7,6 +7,7 @@ namespace inz.Service
 {
     public class DocumentService
     {
+        #region fields
         private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
             ".pdf",
@@ -17,7 +18,8 @@ namespace inz.Service
         private readonly IDocumentContentStorage _storage;
         private readonly IFileReader _fileReader;
         private readonly ILogger<DocumentService> _logger;
-
+        #endregion
+        #region constructor
         public DocumentService(IDocumentRepository documentRepository, IDocumentContentStorage storage, IFileReader fileReader, ILogger<DocumentService> logger) 
         { 
             _documentRepository = documentRepository;
@@ -25,6 +27,7 @@ namespace inz.Service
             _fileReader = fileReader;
             _logger = logger;
         }
+        #endregion
         #region AddDocumentAsync
         public async Task<Guid> AddDocumentAsync(IFormFile file)
         {
@@ -56,8 +59,8 @@ namespace inz.Service
             return metadata.Id;
         }
         #endregion
-        #region GetDocumentByIdAsync
-        public async Task<Stream> GetDocumentByIdAsync(Guid documentId)
+        #region GetDocumentMetadataByIdAsync
+        public async Task<Stream> GetDocumentMetadataByIdAsync(Guid documentId)
         {
             var metadata = await _documentRepository.GetMetadaById(documentId);
             ValidateMetadata(metadata);
@@ -72,7 +75,40 @@ namespace inz.Service
             }
         }
         #endregion
+        #region DeleteDocumentAsync
+        public async Task DeleteDocumentAsync(Guid documentId)
+        {
+            var metadata = await _documentRepository.GetMetadaById(documentId);
+            ValidateMetadata(metadata);
 
+            var metadataId = metadata.Id;
+            var documentName = metadata.DocumentName;
+
+            if (metadata.ProcessingStatus != ProcessStatus.MARKED_TO_DELETE) 
+                throw new DocumentWrongStatusException($"{documentName}: Dokument musi być oznaczony do usunięcia, aby można było go usunąć.", documentName);
+            
+            var blobKey = metadata.BlobKey;
+
+            var blobExists = await _storage.ExistsAsync(blobKey);
+            if (!blobExists)
+            {
+                await _documentRepository.UpdateMetadataProcessingStatus(metadataId, ProcessStatus.DELETED);
+                return;
+            }
+            try
+            {
+              await _storage.DeleteAsync(blobKey);
+              await _documentRepository.UpdateMetadataProcessingStatus(metadataId, ProcessStatus.DELETED);
+            } catch(Exception e)
+            {
+                _logger.LogError(e, "{documentName}: Nie udało się usunąć dokumentu z magazynu. Oznaczono jako FAILED_TO_DELETE", documentName);
+                await _documentRepository.UpdateMetadataProcessingStatus(metadataId, ProcessStatus.FAILED_TO_DELETE);
+                throw new DocumentDeletionFailureException($"{documentName}: Wystąpił błąd podczas usuwania dokumentu.", documentName, e);
+            }
+
+        }
+
+        #endregion
         #region privateMethods
         private async Task<DocumentMetadata> ValidateInputDocumentMetadata(IFormFile file) {
 
@@ -90,7 +126,7 @@ namespace inz.Service
         private void ValidateMetadata(DocumentMetadata? documentMetadata)
         {
             if (documentMetadata is null) throw new DocumentNotFoundException("Nie znaleziono szukanego dokumentu.");
-            if (documentMetadata.ProcessingStatus != ProcessStatus.AVAILABLE) throw new DocumentUnavailableException($"{documentMetadata.DocumentName}: Dokument aktualnie nie jest dostępny", documentMetadata.DocumentName);
+            if (documentMetadata.ProcessingStatus != ProcessStatus.AVAILABLE ) throw new DocumentUnavailableException($"{documentMetadata.DocumentName}: Dokument aktualnie nie jest dostępny", documentMetadata.DocumentName);
         }
         #endregion
 

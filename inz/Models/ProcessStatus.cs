@@ -4,6 +4,9 @@
     {
         PROCESSING,
         AVAILABLE,
-        FAILED
+        FAILED,
+        MARKED_TO_DELETE,
+        DELETED,
+        FAILED_TO_DELETE,
     }
 }
