@@ -384,7 +384,7 @@ namespace inz.Tests
 
         #endregion
 
-        #region DeleteDocumentTests
+        #region DeleteDocumentAsyncTests
         /// Założenia:
         /// Rozdzielam odpowiedzialności na oznaczenie dokumentu do usunięcia, wykonany osobnym metodą MarkDocumentToDeletAsync, który ustawia status documentu na MARKED_TO_DELETE, oraz metoda DeleteDocument, która usuwa fizycznie dokument
         /// Metoda DeleteDocument:
@@ -509,7 +509,22 @@ namespace inz.Tests
                 Times.Once);
         }
         #endregion
+        #region UpdateDocumentAsyncTests
+        /// Założenia:
+        /// Dziele to na pobranie nowych metadanych, ustawienie statusu PROCESSING_UPDATE, dodanie dokumentu do bloba, aktualizacje meta w SQL.
+        /// 0. Walidacja:
+        /// - jeśli plik null rzucam ArgumentNullException
+        /// - jeśli pusty rzucam EmptyDocumentException
+        /// - jeśli zły typ rzucam UnsupportedDocumentTypeException
+        /// 1. Pobieram metadane z SQL, jeśli nie ma, to rzucam DocumentMetadataNotFoundException (tu stwierdziłem że wprowadze nowy wyjątek, żeby wiedzieć czy sie wyjebał metadane czy dokument)
+        /// 2. Sprawdzam czy status dokumentu jest AVAILABLE, jeśli nie, to rzucam DocumentUnavailableException
+        /// 3. Jeśli wszystko jest poprawne, to zmieniam staus na PROCESSING_UPDATE
+        /// 4. Wyszykuje dokument w Blob, jeśli nie ma, to rzucam DocumentNotFoundException
+        /// 5. Próbuje zaktualizować dokument w Blob. Jeśli się nie uda, to rzucam DocumentProcessingFailureException i ustawiam status FAILED_UPDATE
+        /// 6. Po aktualizacji Bloba, aktualizuję metadane w SQL, jeśli się nie uda, to ustawiam status FAILED_UPDATE i rzucam DocumentProcessingFailureException (albo robie retry)
+        /// 7. Jeśli wszystko okej, to aktualizuje status na AVAILABLE
 
+        #endregion
         #region AddDocumentRegionsPrivateMethods
         private static IFormFile CreateFormFile(string fileName, string content = "sample content")
         {
