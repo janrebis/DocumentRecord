@@ -63,7 +63,7 @@ namespace inz.Service
         public async Task<Stream> GetDocumentMetadataByIdAsync(Guid documentId)
         {
             var metadata = await _documentRepository.GetMetadaById(documentId);
-            ValidateMetadata(metadata);
+            ValidateMetadata(metadata, ProcessStatus.AVAILABLE);
 
             try
             {
@@ -79,14 +79,10 @@ namespace inz.Service
         public async Task DeleteDocumentAsync(Guid documentId)
         {
             var metadata = await _documentRepository.GetMetadaById(documentId);
-            ValidateMetadata(metadata);
+            ValidateMetadata(metadata, ProcessStatus.MARKED_TO_DELETE);
 
             var metadataId = metadata.Id;
             var documentName = metadata.DocumentName;
-
-            if (metadata.ProcessingStatus != ProcessStatus.MARKED_TO_DELETE) 
-                throw new DocumentWrongStatusException($"{documentName}: Dokument musi być oznaczony do usunięcia, aby można było go usunąć.", documentName);
-            
             var blobKey = metadata.BlobKey;
 
             var blobExists = await _storage.ExistsAsync(blobKey);
@@ -123,15 +119,12 @@ namespace inz.Service
             return await _fileReader.ReadFile(file);
         }
 
-        private void ValidateMetadata(DocumentMetadata? documentMetadata)
+        private void ValidateMetadata(DocumentMetadata? documentMetadata, ProcessStatus expectedStatus)
         {
             if (documentMetadata is null) throw new DocumentNotFoundException("Nie znaleziono szukanego dokumentu.");
-            if (documentMetadata.ProcessingStatus != ProcessStatus.AVAILABLE ) throw new DocumentUnavailableException($"{documentMetadata.DocumentName}: Dokument aktualnie nie jest dostępny", documentMetadata.DocumentName);
+            if (documentMetadata.ProcessingStatus != expectedStatus) throw new DocumentUnavailableException($"{documentMetadata.DocumentName}: Dokument aktualnie nie jest dostępny do tej akcji", documentMetadata.DocumentName);
         }
         #endregion
-
-
-
 
     }
 }
