@@ -390,7 +390,7 @@ namespace inz.Tests
         /// Metoda DeleteDocument:
         /// 1. Dostaje jako parametr identyfikator metadanych
         /// 2. Sprawdza czy metadane są w SQL
-        /// 3. Sprawdza czy metoda jest oznaczona jako MARKED_TO_DELETE, jeśli nie to zwracam DocumentWrongStatusException
+        /// 3. Sprawdza czy metoda jest oznaczona jako MARKED_TO_DELETE, jeśli nie to zwracam DocumentUnavailableException
         /// 4. Wyszukuje dokument w Blob
         /// 5. Jeśli nie znajde dokumentu, to zakładam że jest już usuniętyy, zmieniam status na DELETED i kończę
         /// 6. Jeśli znajdzie, to usuwam dokument z Blob, aktualizuję status na DELETED
@@ -415,7 +415,7 @@ namespace inz.Tests
             Func<Task> act = async () => await _documentService.DeleteDocumentAsync(metadata.Id);
 
             //Assert
-            await act.Should().ThrowAsync<DocumentWrongStatusException>();
+            await act.Should().ThrowAsync<DocumentUnavailableException>();
             _storageMock.Verify(x => x.DeleteAsync(It.IsAny<string>()), Times.Never); //bo sprawdzam czy nie poszło dalej 
         }
 
@@ -445,7 +445,7 @@ namespace inz.Tests
             await _documentService.DeleteDocumentAsync(documentId);
 
             // Assert
-            _storageMock.Verify(x => x.DeleteAsync(blobKey), Times.Once);
+            _storageMock.Verify(x => x.DeleteAsync(blobKey), Times.Never);
             _documentRepositoryMock.Verify(x =>
                 x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.DELETED),
                 Times.Once);
@@ -467,14 +467,27 @@ namespace inz.Tests
 
             _storageMock
                 .Setup(x => x.ExistsAsync(blobKey))
+                .ReturnsAsync(true);
+
+            _storageMock
+                .Setup(x => x.DeleteAsync(blobKey))
                 .ThrowsAsync(new Exception("Blob deletion failed"));
+
+            _documentRepositoryMock
+                .Setup(x => x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.FAILED_TO_DELETE))
+                .Returns(Task.CompletedTask);
 
             // Act
             Func<Task> act = async () => await _documentService.DeleteDocumentAsync(documentId);
 
             // Assert
             await act.Should().ThrowAsync<DocumentDeletionFailureException>();
+
+            _storageMock.Verify(x => x.ExistsAsync(blobKey), Times.Once);
             _storageMock.Verify(x => x.DeleteAsync(blobKey), Times.Once);
+            _documentRepositoryMock.Verify(
+                x => x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.FAILED_TO_DELETE),
+                Times.Once);
         }
 
         [Fact]
@@ -492,6 +505,10 @@ namespace inz.Tests
                 .ReturnsAsync(metadata);
 
             _storageMock
+                .Setup(x => x.ExistsAsync(blobKey))
+                .ReturnsAsync(true);
+
+            _storageMock
                 .Setup(x => x.DeleteAsync(blobKey))
                 .Returns(Task.CompletedTask);
 
@@ -503,9 +520,10 @@ namespace inz.Tests
             await _documentService.DeleteDocumentAsync(documentId);
 
             // Assert
+            _storageMock.Verify(x => x.ExistsAsync(blobKey), Times.Once);
             _storageMock.Verify(x => x.DeleteAsync(blobKey), Times.Once);
-            _documentRepositoryMock.Verify(x =>
-                x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.DELETED),
+            _documentRepositoryMock.Verify(
+                x => x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.DELETED),
                 Times.Once);
         }
         #endregion
@@ -523,6 +541,9 @@ namespace inz.Tests
         /// 5. Próbuje zaktualizować dokument w Blob. Jeśli się nie uda, to rzucam DocumentProcessingFailureException i ustawiam status FAILED_UPDATE
         /// 6. Po aktualizacji Bloba, aktualizuję metadane w SQL, jeśli się nie uda, to ustawiam status FAILED_UPDATE i rzucam DocumentProcessingFailureException (albo robie retry)
         /// 7. Jeśli wszystko okej, to aktualizuje status na AVAILABLE
+        /// 
+
+
 
         #endregion
         #region AddDocumentRegionsPrivateMethods
