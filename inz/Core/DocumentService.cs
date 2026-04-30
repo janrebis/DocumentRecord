@@ -5,6 +5,14 @@ using inz.Models;
 
 namespace inz.Service
 {
+
+    /*
+     TODO:
+     - Zamiast zmieniać ręcznie stan procespowania dokumentu, dodać state machine w DocumentMetadata
+     - Rozwiązać problem concurrency:
+        * dodać do DocumentRepository atomic update np. metodę TrySetStatusAsync
+        * w serwisach przerobić 
+     */
     public class DocumentService
     {
         #region fields
@@ -45,19 +53,23 @@ namespace inz.Service
 
             try
             {
-                metadata.ProcessingStatus = ProcessStatus.PROCESSING; //ustawiam status na processing, żeby w bazie był od razu widoczny, że dokument jest w trakcie dodawania
+                metadata.StartProcessing(); //ustawiam status na processing, żeby w bazie był od razu widoczny, że dokument jest w trakcie dodawania
                 await _documentRepository.AddDocumentMetadata(metadata); 
                 metadataSaved = true; //ustawiam true jeśli uda sie zapis do bazy
 
-                await _storage.AddDocumentToStorage(file); 
-                await _documentRepository.UpdateMetadataProcessingStatus(metadata.Id, ProcessStatus.AVAILABLE); 
+                await _storage.AddDocumentToStorage(file);
+                metadata.FinishProcessing();
+                await _documentRepository.UpdateMetadataProcessingStatus(metadata.Id, metadata.ProcessingStatus); 
                 _logger.LogInformation($"{documentName}: Zakończono dodawanie dokumentu. Jest teraz w pełni dostępny", documentName);
             }
 
             catch (Exception e)
             {
-                if (metadataSaved) await _documentRepository.UpdateMetadataProcessingStatus(metadata.Id, ProcessStatus.FAILED);
-
+                if (metadataSaved) 
+                {
+                    metadata.FailProcessing();
+                    await _documentRepository.UpdateMetadataProcessingStatus(metadata.Id, metadata.ProcessingStatus);
+                }
                 _logger.LogError(e, $"{documentName}: Dodawanie dokumentu zakończono błędem", documentName);
                 throw new DocumentProcessingFailureException($"{documentName}: Wystąpił błąd podczas dodawania dokumentu.", documentName, e);
             }
@@ -97,35 +109,51 @@ namespace inz.Service
         public async Task DeleteDocumentAsync(int documentId)
         {
             var metadata = await _documentRepository.GetMetadaById(documentId);
-            ValidateMetadata(metadata, ProcessStatus.MARKED_TO_DELETE); //Sprawdzam czy dokument oznaczony do usunięcia, zabezpieczenie przed przypadkowym usunięciem dokumentu, który nie jest oznaczony do usunięcia
+            metadata.EnsureMarkedToDelete();
 
-            //pobieram potrzebne dane do logów i usuwania z magazynu
             var metadataId = metadata.Id;
             var documentName = metadata.DocumentName;
             var blobKey = metadata.BlobKey;
 
             var blobExists = await _storage.ExistsAsync(blobKey);
-            if (!blobExists) 
+
+            if (!blobExists)
             {
-                //Jeśli dokumentu nie ma już w magazynie, to ustawiam metadane jako usunięte, aby nie było niespójności między magazynem a bazą danych, i kończę metodę, bo nie ma już dokumentu do usunięciaS
-                await _documentRepository.UpdateMetadataProcessingStatus(metadataId, ProcessStatus.DELETED);
+                metadata.MarkDeleted();
+                await _documentRepository.UpdateMetadataProcessingStatus(metadataId, metadata.ProcessingStatus);
                 return;
             }
+
             try
             {
+                await _storage.DeleteAsync(blobKey);
+                metadata.MarkDeleted();
 
-              await _storage.DeleteAsync(blobKey);
-              await _documentRepository.UpdateMetadataProcessingStatus(metadataId, ProcessStatus.DELETED);
-            } catch(Exception e)
+                await _documentRepository.UpdateMetadataProcessingStatus( metadataId, metadata.ProcessingStatus);
+            }
+            catch (Exception e)
             {
-                _logger.LogError(e, "{documentName}: Nie udało się usunąć dokumentu z magazynu. Oznaczono jako FAILED_TO_DELETE", documentName);
-                await _documentRepository.UpdateMetadataProcessingStatus(metadataId, ProcessStatus.FAILED_TO_DELETE);
-                throw new DocumentDeletionFailureException($"{documentName}: Wystąpił błąd podczas usuwania dokumentu.", documentName, e);
+                _logger.LogError(e, "{documentName}: Nie udało się usunąć dokumentu z magazynu.", documentName);
+
+                metadata.FailDelete();
+
+                await _documentRepository.UpdateMetadataProcessingStatus( metadataId, metadata.ProcessingStatus);
+
+                throw new DocumentDeletionFailureException(  $"{documentName}: Wystąpił błąd podczas usuwania dokumentu.", documentName, e);
             }
 
         }
         #endregion
         #region UpdateDocumentAsync
+        /// <summary>
+        /// Metoda aktualizuje 
+        /// </summary>
+        /// <param name="documentId">Identyfikator dokumentu</param>
+        /// <param name="file">dokument którym aktualizujemy bieżący dokument</param>
+        /// <returns>Identyfikator dokumentur</returns>
+        /// <exception cref="DocumentNotFoundException">Wyjątek zwracany, gdy dokument nie zostanie znaleziony</exception>
+        /// <exception cref="DocumentProcessingFailureException">Wyjątek zwracany, gdy wystąpi błąd podczas przetwarzania dokumentu</exception>
+        
 
         public async Task<int> UpdateDocumentAsync(int documentId, IFormFile file)
         {
@@ -139,13 +167,13 @@ namespace inz.Service
             var documentName = existingMetadata.DocumentName;
             var blobKey = existingMetadata.BlobKey;
 
-            await _documentRepository.UpdateMetadataProcessingStatus( metadataId, ProcessStatus.PROCESSING_UPDATE);
+            existingMetadata.StartUpdate();
 
             var blobExists = await _storage.ExistsAsync(blobKey);
 
             if (!blobExists)
             {
-                await _documentRepository.UpdateMetadataProcessingStatus( metadataId, ProcessStatus.FAILED_UPDATE);
+                existingMetadata.FailUpdate();
 
                 _logger.LogWarning("Dokument o id {DocumentId} nie został znaleziony w magazynie. Ustawiono status FAILED_UPDATE.", metadataId);
                 throw new DocumentNotFoundException("Dokument nie został znaleziony w magazynie.");
@@ -157,13 +185,14 @@ namespace inz.Service
 
                 newMetadata.Id = metadataId;
                 newMetadata.BlobKey = blobKey;
-                newMetadata.ProcessingStatus = ProcessStatus.AVAILABLE;
+                newMetadata.StartUpdate();
+                newMetadata.FinishUpdate();
 
                 await _documentRepository.UpdateDocumentMetadataAsync(metadataId, newMetadata);
             }
             catch (Exception e)
             {
-                await _documentRepository.UpdateMetadataProcessingStatus( metadataId, ProcessStatus.FAILED_UPDATE);
+                existingMetadata.FailUpdate();
                 _logger.LogError( e, "{DocumentName}: Wystąpił błąd podczas aktualizacji dokumentu.", documentName);
                 throw new DocumentProcessingFailureException($"{documentName}: Wystąpił błąd podczas aktualizacji dokumentu.", documentName, e);
             }
