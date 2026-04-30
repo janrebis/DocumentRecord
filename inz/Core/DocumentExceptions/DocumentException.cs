@@ -22,11 +22,11 @@
         public UnsupportedDocumentTypeException(string message) : base(message) { }
     }
 
-    public class DocumentProcessingFailure : DocumentException
+    public class DocumentProcessingFailureException : DocumentException
     {
         public string DocumentName { get; }
         public Exception InnerException { get; }
-        public DocumentProcessingFailure(string message, string documentName, Exception innerException)
+        public DocumentProcessingFailureException(string message, string documentName, Exception innerException)
             : base(message, innerException)
         {
             DocumentName = documentName;
@@ -80,22 +80,7 @@
 
     public class DocumentMetadataNotFoundException : DocumentException
     {
-        public Exception InnerException { get; }
-        public DocumentMetadataNotFoundException(string message, Exception innerException) : base(message)
-        {
-            InnerException = innerException;
-        }
+        public DocumentMetadataNotFoundException(string message) : base(message)
+        {}
     }
-
-    public class DocumentProcessingFailureException : DocumentException
-    {
-        public string DocumentName { get; }
-        public Exception InnerException { get; }
-        public DocumentProcessingFailureException(string message, string documentName, Exception innerException) : base(message)
-        {
-            DocumentName = documentName;
-            InnerException = innerException;
-        }
-    }
-
 }
