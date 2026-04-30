@@ -8,5 +8,6 @@ namespace inz.Service
         public Task<Stream> GetDocumentStream(string BlokKey);
         public Task DeleteAsync(string BlobKey);
         public Task<bool> ExistsAsync(string BlobKey);
+        public Task UpdateDocumentInStorageAsync(IFormFile file);
     }
 }
