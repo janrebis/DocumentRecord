@@ -275,7 +275,6 @@ namespace inz.Tests
         }
 
         #endregion
-
         #region GetDocumentByIdTests
         /// Założenia:
         /// 1. Dokument jest wwyszukiwany po identyfikatorze przekazanym w metodzie
@@ -383,7 +382,6 @@ namespace inz.Tests
         }
 
         #endregion
-
         #region DeleteDocumentAsyncTests
         /// Założenia:
         /// Rozdzielam odpowiedzialności na oznaczenie dokumentu do usunięcia, wykonany osobnym metodą MarkDocumentToDeletAsync, który ustawia status documentu na MARKED_TO_DELETE, oraz metoda DeleteDocument, która usuwa fizycznie dokument
@@ -531,7 +529,7 @@ namespace inz.Tests
         /// Założenia:
         /// Dziele to na pobranie nowych metadanych, ustawienie statusu PROCESSING_UPDATE, dodanie dokumentu do bloba, aktualizacje meta w SQL.
         /// 0. Walidacja:
-        /// - jeśli plik null rzucam ArgumentNullException
+        /// - jeśli przesyłany plik null rzucam ArgumentNullException
         /// - jeśli pusty rzucam EmptyDocumentException
         /// - jeśli zły typ rzucam UnsupportedDocumentTypeException
         /// 1. Pobieram metadane z SQL, jeśli nie ma, to rzucam DocumentMetadataNotFoundException (tu stwierdziłem że wprowadze nowy wyjątek, żeby wiedzieć czy sie wyjebał metadane czy dokument)
@@ -543,8 +541,310 @@ namespace inz.Tests
         /// 7. Jeśli wszystko okej, to aktualizuje status na AVAILABLE
         /// 
 
+        [Fact]
+        public async Task UpdateDocumentAsync_ShouldThrowArgumentNullException_WhenSentFileIsNull()
+        {
+            // Arrange
+            var documentId = Guid.NewGuid();
 
+            // Act
+            Func<Task> act = async () => await _documentService.UpdateDocumentAsync(documentId, null!);
 
+            // Assert
+            await act.Should().ThrowAsync<ArgumentNullException>();
+
+            _fileReaderMock.Verify(x => x.ReadFile(It.IsAny<IFormFile>()), Times.Never);
+            _documentRepositoryMock.Verify(x => x.GetMetadaById(documentId), Times.Never);
+            _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(It.IsAny<Guid>(), It.IsAny<ProcessStatus>()), Times.Never);
+            _storageMock.Verify(x => x.UpdateDocumentInStorage(It.IsAny<string>(), It.IsAny<IFormFile>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task UpdateDocumentAsync_ShouldThrowEmptyDocumentException_WhenFileIsEmpty()
+        {
+            // Arrange
+            var documentId = Guid.NewGuid();
+            var file = CreateFormFile("empty.pdf", string.Empty);
+
+            // Act
+            Func<Task> act = async () => await _documentService.UpdateDocumentAsync(documentId, file);
+
+            // Assert
+            await act.Should().ThrowAsync<EmptyDocumentException>();
+
+            _fileReaderMock.Verify(x => x.ReadFile(It.IsAny<IFormFile>()), Times.Never);
+            _documentRepositoryMock.Verify(x => x.GetMetadaById(documentId), Times.Never);
+            _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(It.IsAny<Guid>(), It.IsAny<ProcessStatus>()), Times.Never);
+            _storageMock.Verify(x => x.UpdateDocumentInStorage(It.IsAny<string>(), It.IsAny<IFormFile>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task UpdateDocumentAsync_ShouldThrowUnsupportedDocumentTypeException_WhenExtensionIsNotSupported()
+        {
+            // Arrange
+            var documentId = Guid.NewGuid();
+            var file = CreateFormFile("malware.exe", "fake content");
+
+            // Act
+            Func<Task> act = async () => await _documentService.UpdateDocumentAsync(documentId, file);
+
+            // Assert
+            await act.Should().ThrowAsync<UnsupportedDocumentTypeException>();
+
+            _fileReaderMock.Verify(x => x.ReadFile(It.IsAny<IFormFile>()), Times.Never);
+            _documentRepositoryMock.Verify(x => x.GetMetadaById(documentId), Times.Never);
+            _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(It.IsAny<Guid>(), It.IsAny<ProcessStatus>()), Times.Never);
+            _storageMock.Verify(x => x.UpdateDocumentInStorage(It.IsAny<string>(), It.IsAny<IFormFile>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task UpdateDocumentAsync_ShouldThrowDocumentMetadataNotFoundException_WhenMetadataDoesNotExist()
+        {
+            // Arrange
+            var documentId = Guid.NewGuid();
+            var file = CreateFormFile("document.pdf", "dummy content");
+
+            var newMetadata = CreateMetadata();
+
+            _fileReaderMock
+                .Setup(x => x.ReadFile(file))
+                .ReturnsAsync(newMetadata);
+
+            _documentRepositoryMock
+                .Setup(x => x.GetMetadaById(documentId))
+                .ReturnsAsync((DocumentMetadata?)null);
+
+            // Act
+            Func<Task> act = async () => await _documentService.UpdateDocumentAsync(documentId, file);
+
+            // Assert
+            await act.Should().ThrowAsync<DocumentMetadataNotFoundException>();
+
+            _fileReaderMock.Verify(x => x.ReadFile(It.IsAny<IFormFile>()), Times.Once);
+            _documentRepositoryMock.Verify(x => x.GetMetadaById(documentId), Times.Once);
+            _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(It.IsAny<Guid>(), It.IsAny<ProcessStatus>()), Times.Never);
+            _storageMock.Verify(x => x.UpdateDocumentInStorage(It.IsAny<string>(), It.IsAny<IFormFile>()), Times.Never);
+            _documentRepositoryMock.Verify(x => x.UpdateDocumentMetadataAsync(It.IsAny<Guid>(), It.IsAny<DocumentMetadata>()), Times.Never);
+        }
+
+        [Theory]
+        [InlineData(ProcessStatus.PROCESSING)]
+        [InlineData(ProcessStatus.FAILED)]
+        [InlineData(ProcessStatus.FAILED_TO_DELETE)]
+        [InlineData(ProcessStatus.PROCESSING_UPDATE)]
+        [InlineData(ProcessStatus.FAILED_UPDATE)]
+        [InlineData(ProcessStatus.MARKED_TO_DELETE)]
+        public async Task UpdateDocumentAsync_ShouldThrowDocumentUnavailableException_WhenStatusIsNotAvailable(ProcessStatus processStatus)
+        {
+            // Arrange
+            var documentId = Guid.NewGuid();
+            var file = CreateFormFile("document.pdf", "dummy content");
+
+            var existingMetadata = CreateMetadata();
+            existingMetadata.ProcessingStatus = processStatus;
+            existingMetadata.BlobKey = "existingBlobKey";
+
+            var newMetadata = CreateMetadata();
+
+            _fileReaderMock
+                .Setup(x => x.ReadFile(file))
+                .ReturnsAsync(newMetadata);
+
+            _documentRepositoryMock
+                .Setup(x => x.GetMetadaById(documentId))
+                .ReturnsAsync(existingMetadata);
+
+            // Act
+            Func<Task> act = async () => await _documentService.UpdateDocumentAsync(documentId, file);
+
+            // Assert
+            await act.Should().ThrowAsync<DocumentUnavailableException>();
+
+            _fileReaderMock.Verify(x => x.ReadFile(It.IsAny<IFormFile>()), Times.Once);
+            _documentRepositoryMock.Verify(x => x.GetMetadaById(documentId), Times.Once);
+            _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(It.IsAny<Guid>(), It.IsAny<ProcessStatus>()), Times.Never);
+            _storageMock.Verify(x => x.UpdateDocumentInStorage(It.IsAny<string>(), It.IsAny<IFormFile>()), Times.Never);
+            _documentRepositoryMock.Verify(x => x.UpdateDocumentMetadataAsync(It.IsAny<Guid>(), It.IsAny<DocumentMetadata>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task UpdateDocumentAsync_ShouldThrowDocumentNotFoundException_WhenBlobIsNotFound()
+        {
+            // Arrange
+            var documentId = Guid.NewGuid();
+            var file = CreateFormFile("document.pdf", "dummy content");
+
+            var existingMetadata = CreateMetadata();
+            existingMetadata.ProcessingStatus = ProcessStatus.AVAILABLE;
+            existingMetadata.BlobKey = "existingBlobKey";
+
+            var newMetadata = CreateMetadata();
+
+            _fileReaderMock
+                .Setup(x => x.ReadFile(file))
+                .ReturnsAsync(newMetadata);
+
+            _documentRepositoryMock
+                .Setup(x => x.GetMetadaById(documentId))
+                .ReturnsAsync(existingMetadata);
+
+            _storageMock
+                .Setup(x => x.ExistsAsync(existingMetadata.BlobKey))
+                .ReturnsAsync(false);
+
+            // Act
+            Func<Task> act = async () => await _documentService.UpdateDocumentAsync(documentId, file);
+
+            // Assert
+            await act.Should().ThrowAsync<DocumentNotFoundException>();
+
+            _fileReaderMock.Verify(x => x.ReadFile(It.IsAny<IFormFile>()), Times.Once);
+            _documentRepositoryMock.Verify(x => x.GetMetadaById(documentId), Times.Once);
+            _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.PROCESSING_UPDATE), Times.Once);
+            _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.FAILED_UPDATE), Times.Once);
+            _storageMock.Verify(x => x.ExistsAsync(existingMetadata.BlobKey), Times.Once);
+            _storageMock.Verify(x => x.UpdateDocumentInStorage(It.IsAny<string>(), It.IsAny<IFormFile>()), Times.Never);
+            _documentRepositoryMock.Verify(x => x.UpdateDocumentMetadataAsync(It.IsAny<Guid>(), It.IsAny<DocumentMetadata>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task UpdateDocumentAsync_ShouldThrowDocumentProcessingFailureException_WhenBlobUpdateFails()
+        {
+            // Arrange
+            var documentId = Guid.NewGuid();
+            var file = CreateFormFile("document.pdf", "dummy content");
+
+            var existingMetadata = CreateMetadata();
+            existingMetadata.ProcessingStatus = ProcessStatus.AVAILABLE;
+            existingMetadata.BlobKey = "existingBlobKey";
+
+            var newMetadata = CreateMetadata();
+
+            _fileReaderMock
+                .Setup(x => x.ReadFile(file))
+                .ReturnsAsync(newMetadata);
+
+            _documentRepositoryMock
+                .Setup(x => x.GetMetadaById(documentId))
+                .ReturnsAsync(existingMetadata);
+
+            _storageMock
+                .Setup(x => x.ExistsAsync(existingMetadata.BlobKey))
+                .ReturnsAsync(true);
+
+            _storageMock
+                .Setup(x => x.UpdateDocumentInStorage(existingMetadata.BlobKey, file))
+                .ThrowsAsync(new Exception("Blob update failed"));
+
+            // Act
+            Func<Task> act = async () => await _documentService.UpdateDocumentAsync(documentId, file);
+
+            // Assert
+            await act.Should().ThrowAsync<DocumentProcessingFailureException>();
+
+            _fileReaderMock.Verify(x => x.ReadFile(It.IsAny<IFormFile>()), Times.Once);
+            _documentRepositoryMock.Verify(x => x.GetMetadaById(documentId), Times.Once);
+            _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.PROCESSING_UPDATE), Times.Once);
+            _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.FAILED_UPDATE), Times.Once);
+            _storageMock.Verify(x => x.ExistsAsync(existingMetadata.BlobKey), Times.Once);
+            _storageMock.Verify(x => x.UpdateDocumentInStorage(existingMetadata.BlobKey, file), Times.Once);
+            _documentRepositoryMock.Verify(x => x.UpdateDocumentMetadataAsync(It.IsAny<Guid>(), It.IsAny<DocumentMetadata>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task UpdateDocumentAsync_ShouldThrowDocumentProcessingFailureException_WhenMetadataUpdateFails()
+        {
+            // Arrange
+            var documentId = Guid.NewGuid();
+            var file = CreateFormFile("document.pdf", "dummy content");
+
+            var existingMetadata = CreateMetadata();
+            existingMetadata.ProcessingStatus = ProcessStatus.AVAILABLE;
+            existingMetadata.BlobKey = "existingBlobKey";
+
+            var newMetadata = CreateMetadata();
+
+            _fileReaderMock
+                .Setup(x => x.ReadFile(file))
+                .ReturnsAsync(newMetadata);
+
+            _documentRepositoryMock
+                .Setup(x => x.GetMetadaById(documentId))
+                .ReturnsAsync(existingMetadata);
+
+            _storageMock
+                .Setup(x => x.ExistsAsync(existingMetadata.BlobKey))
+                .ReturnsAsync(true);
+
+            _storageMock
+                .Setup(x => x.UpdateDocumentInStorage(existingMetadata.BlobKey, file))
+                .Returns(Task.CompletedTask);
+
+            _documentRepositoryMock
+                .Setup(x => x.UpdateDocumentMetadataAsync(documentId, It.IsAny<DocumentMetadata>()))
+                .ThrowsAsync(new Exception("Metadata update failed"));
+
+            // Act
+            Func<Task> act = async () => await _documentService.UpdateDocumentAsync(documentId, file);
+
+            // Assert
+            await act.Should().ThrowAsync<DocumentProcessingFailureException>();
+            _fileReaderMock.Verify(x => x.ReadFile(It.IsAny<IFormFile>()), Times.Once);
+            _documentRepositoryMock.Verify(x => x.GetMetadaById(documentId), Times.Once);
+            _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.PROCESSING_UPDATE), Times.Once);
+            _storageMock.Verify(x => x.ExistsAsync(existingMetadata.BlobKey), Times.Once);
+            _storageMock.Verify(x => x.UpdateDocumentInStorage(existingMetadata.BlobKey, file), Times.Once);
+            _documentRepositoryMock.Verify(x => x.UpdateDocumentMetadataAsync(documentId, It.IsAny<DocumentMetadata>()),Times.Once);
+            _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.FAILED_UPDATE), Times.Once);
+        }
+
+        [Fact]
+        public async Task UpdateDocumentAsync_ShouldUpdateDocumentAndSetStatusAvailable_WhenUpdateSucceeds()
+        {
+            // Arrange
+            var documentId = Guid.NewGuid();
+            var file = CreateFormFile("document.pdf", "dummy content");
+
+            var existingMetadata = CreateMetadata();
+            existingMetadata.ProcessingStatus = ProcessStatus.AVAILABLE;
+            existingMetadata.BlobKey = "existingBlobKey";
+
+            var newMetadata = CreateMetadata();
+
+            _fileReaderMock
+                .Setup(x => x.ReadFile(file))
+                .ReturnsAsync(newMetadata);
+
+            _documentRepositoryMock
+                .Setup(x => x.GetMetadaById(documentId))
+                .ReturnsAsync(existingMetadata);
+
+            _storageMock
+                .Setup(x => x.ExistsAsync(existingMetadata.BlobKey))
+                .ReturnsAsync(true);
+
+            _storageMock
+                .Setup(x => x.UpdateDocumentInStorage(existingMetadata.BlobKey, file))
+                .Returns(Task.CompletedTask);
+
+            _documentRepositoryMock
+                .Setup(x => x.UpdateDocumentMetadataAsync(
+                    documentId,
+                    It.Is<DocumentMetadata>(m => m.ProcessingStatus == ProcessStatus.AVAILABLE)))
+                .Returns(Task.CompletedTask);
+
+            // Act
+            await _documentService.UpdateDocumentAsync(documentId, file);
+
+            // Assert
+            _fileReaderMock.Verify(x => x.ReadFile(It.IsAny<IFormFile>()), Times.Once);
+            _documentRepositoryMock.Verify(x => x.GetMetadaById(documentId), Times.Once);
+            _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.PROCESSING_UPDATE),Times.Once);
+            _storageMock.Verify(x => x.ExistsAsync(existingMetadata.BlobKey), Times.Once);
+            _storageMock.Verify(x => x.UpdateDocumentInStorage(existingMetadata.BlobKey, file), Times.Once);
+            _documentRepositoryMock.Verify(x => x.UpdateDocumentMetadataAsync(documentId,It.Is<DocumentMetadata>(m => m.ProcessingStatus == ProcessStatus.AVAILABLE)),Times.Once);
+            _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.FAILED_UPDATE), Times.Never);
+        }
         #endregion
         #region AddDocumentRegionsPrivateMethods
         private static IFormFile CreateFormFile(string fileName, string content = "sample content")
