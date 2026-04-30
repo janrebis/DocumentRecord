@@ -556,7 +556,7 @@ namespace inz.Tests
             _fileReaderMock.Verify(x => x.ReadFile(It.IsAny<IFormFile>()), Times.Never);
             _documentRepositoryMock.Verify(x => x.GetMetadaById(documentId), Times.Never);
             _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(It.IsAny<Guid>(), It.IsAny<ProcessStatus>()), Times.Never);
-            _storageMock.Verify(x => x.UpdateDocumentInStorage(It.IsAny<string>(), It.IsAny<IFormFile>()), Times.Never);
+            _storageMock.Verify(x => x.UpdateDocumentInStorageAsync(It.IsAny<string>(), It.IsAny<IFormFile>()), Times.Never);
         }
 
         [Fact]
@@ -575,7 +575,7 @@ namespace inz.Tests
             _fileReaderMock.Verify(x => x.ReadFile(It.IsAny<IFormFile>()), Times.Never);
             _documentRepositoryMock.Verify(x => x.GetMetadaById(documentId), Times.Never);
             _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(It.IsAny<Guid>(), It.IsAny<ProcessStatus>()), Times.Never);
-            _storageMock.Verify(x => x.UpdateDocumentInStorage(It.IsAny<string>(), It.IsAny<IFormFile>()), Times.Never);
+            _storageMock.Verify(x => x.UpdateDocumentInStorageAsync(It.IsAny<string>(), It.IsAny<IFormFile>()), Times.Never);
         }
 
         [Fact]
@@ -594,7 +594,7 @@ namespace inz.Tests
             _fileReaderMock.Verify(x => x.ReadFile(It.IsAny<IFormFile>()), Times.Never);
             _documentRepositoryMock.Verify(x => x.GetMetadaById(documentId), Times.Never);
             _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(It.IsAny<Guid>(), It.IsAny<ProcessStatus>()), Times.Never);
-            _storageMock.Verify(x => x.UpdateDocumentInStorage(It.IsAny<string>(), It.IsAny<IFormFile>()), Times.Never);
+            _storageMock.Verify(x => x.UpdateDocumentInStorageAsync(It.IsAny<string>(), It.IsAny<IFormFile>()), Times.Never);
         }
 
         [Fact]
@@ -623,7 +623,7 @@ namespace inz.Tests
             _fileReaderMock.Verify(x => x.ReadFile(It.IsAny<IFormFile>()), Times.Once);
             _documentRepositoryMock.Verify(x => x.GetMetadaById(documentId), Times.Once);
             _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(It.IsAny<Guid>(), It.IsAny<ProcessStatus>()), Times.Never);
-            _storageMock.Verify(x => x.UpdateDocumentInStorage(It.IsAny<string>(), It.IsAny<IFormFile>()), Times.Never);
+            _storageMock.Verify(x => x.UpdateDocumentInStorageAsync(It.IsAny<string>(), It.IsAny<IFormFile>()), Times.Never);
             _documentRepositoryMock.Verify(x => x.UpdateDocumentMetadataAsync(It.IsAny<Guid>(), It.IsAny<DocumentMetadata>()), Times.Never);
         }
 
@@ -663,7 +663,7 @@ namespace inz.Tests
             _fileReaderMock.Verify(x => x.ReadFile(It.IsAny<IFormFile>()), Times.Once);
             _documentRepositoryMock.Verify(x => x.GetMetadaById(documentId), Times.Once);
             _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(It.IsAny<Guid>(), It.IsAny<ProcessStatus>()), Times.Never);
-            _storageMock.Verify(x => x.UpdateDocumentInStorage(It.IsAny<string>(), It.IsAny<IFormFile>()), Times.Never);
+            _storageMock.Verify(x => x.UpdateDocumentInStorageAsync(It.IsAny<string>(), It.IsAny<IFormFile>()), Times.Never);
             _documentRepositoryMock.Verify(x => x.UpdateDocumentMetadataAsync(It.IsAny<Guid>(), It.IsAny<DocumentMetadata>()), Times.Never);
         }
 
@@ -703,7 +703,7 @@ namespace inz.Tests
             _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.PROCESSING_UPDATE), Times.Once);
             _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.FAILED_UPDATE), Times.Once);
             _storageMock.Verify(x => x.ExistsAsync(existingMetadata.BlobKey), Times.Once);
-            _storageMock.Verify(x => x.UpdateDocumentInStorage(It.IsAny<string>(), It.IsAny<IFormFile>()), Times.Never);
+            _storageMock.Verify(x => x.UpdateDocumentInStorageAsync(It.IsAny<string>(), It.IsAny<IFormFile>()), Times.Never);
             _documentRepositoryMock.Verify(x => x.UpdateDocumentMetadataAsync(It.IsAny<Guid>(), It.IsAny<DocumentMetadata>()), Times.Never);
         }
 
@@ -733,7 +733,7 @@ namespace inz.Tests
                 .ReturnsAsync(true);
 
             _storageMock
-                .Setup(x => x.UpdateDocumentInStorage(existingMetadata.BlobKey, file))
+                .Setup(x => x.UpdateDocumentInStorageAsync(existingMetadata.BlobKey, file))
                 .ThrowsAsync(new Exception("Blob update failed"));
 
             // Act
@@ -747,7 +747,7 @@ namespace inz.Tests
             _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.PROCESSING_UPDATE), Times.Once);
             _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.FAILED_UPDATE), Times.Once);
             _storageMock.Verify(x => x.ExistsAsync(existingMetadata.BlobKey), Times.Once);
-            _storageMock.Verify(x => x.UpdateDocumentInStorage(existingMetadata.BlobKey, file), Times.Once);
+            _storageMock.Verify(x => x.UpdateDocumentInStorageAsync(existingMetadata.BlobKey, file), Times.Once);
             _documentRepositoryMock.Verify(x => x.UpdateDocumentMetadataAsync(It.IsAny<Guid>(), It.IsAny<DocumentMetadata>()), Times.Never);
         }
 
@@ -777,7 +777,7 @@ namespace inz.Tests
                 .ReturnsAsync(true);
 
             _storageMock
-                .Setup(x => x.UpdateDocumentInStorage(existingMetadata.BlobKey, file))
+                .Setup(x => x.UpdateDocumentInStorageAsync(existingMetadata.BlobKey, file))
                 .Returns(Task.CompletedTask);
 
             _documentRepositoryMock
@@ -793,7 +793,7 @@ namespace inz.Tests
             _documentRepositoryMock.Verify(x => x.GetMetadaById(documentId), Times.Once);
             _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.PROCESSING_UPDATE), Times.Once);
             _storageMock.Verify(x => x.ExistsAsync(existingMetadata.BlobKey), Times.Once);
-            _storageMock.Verify(x => x.UpdateDocumentInStorage(existingMetadata.BlobKey, file), Times.Once);
+            _storageMock.Verify(x => x.UpdateDocumentInStorageAsync(existingMetadata.BlobKey, file), Times.Once);
             _documentRepositoryMock.Verify(x => x.UpdateDocumentMetadataAsync(documentId, It.IsAny<DocumentMetadata>()),Times.Once);
             _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.FAILED_UPDATE), Times.Once);
         }
@@ -824,7 +824,7 @@ namespace inz.Tests
                 .ReturnsAsync(true);
 
             _storageMock
-                .Setup(x => x.UpdateDocumentInStorage(existingMetadata.BlobKey, file))
+                .Setup(x => x.UpdateDocumentInStorageAsync(existingMetadata.BlobKey, file))
                 .Returns(Task.CompletedTask);
 
             _documentRepositoryMock
@@ -841,7 +841,7 @@ namespace inz.Tests
             _documentRepositoryMock.Verify(x => x.GetMetadaById(documentId), Times.Once);
             _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.PROCESSING_UPDATE),Times.Once);
             _storageMock.Verify(x => x.ExistsAsync(existingMetadata.BlobKey), Times.Once);
-            _storageMock.Verify(x => x.UpdateDocumentInStorage(existingMetadata.BlobKey, file), Times.Once);
+            _storageMock.Verify(x => x.UpdateDocumentInStorageAsync(existingMetadata.BlobKey, file), Times.Once);
             _documentRepositoryMock.Verify(x => x.UpdateDocumentMetadataAsync(documentId,It.Is<DocumentMetadata>(m => m.ProcessingStatus == ProcessStatus.AVAILABLE)),Times.Once);
             _documentRepositoryMock.Verify(x => x.UpdateMetadataProcessingStatus(documentId, ProcessStatus.FAILED_UPDATE), Times.Never);
         }
