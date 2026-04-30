@@ -8,5 +8,7 @@
         MARKED_TO_DELETE,
         DELETED,
         FAILED_TO_DELETE,
+        PROCESSING_UPDATE,
+        FAILED_UPDATE
     }
 }

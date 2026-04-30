@@ -105,6 +105,12 @@ namespace inz.Service
         }
 
         #endregion
+        #region UpdateDocumentAsync
+        public async Task<int> UpdateDocumentAsync(Guid documentId, IFormFile file)
+        {
+            throw new NotImplementedException();
+        }
+        #endregion
         #region privateMethods
         private async Task<DocumentMetadata> ValidateInputDocumentMetadata(IFormFile file) {
 
