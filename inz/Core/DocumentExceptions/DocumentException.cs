@@ -77,4 +77,25 @@
             InnerException = innerException;
         }
     }
+
+    public class DocumentMetadataNotFoundException : DocumentException
+    {
+        public Exception InnerException { get; }
+        public DocumentMetadataNotFoundException(string message, Exception innerException) : base(message)
+        {
+            InnerException = innerException;
+        }
+    }
+
+    public class DocumentProcessingFailureException : DocumentException
+    {
+        public string DocumentName { get; }
+        public Exception InnerException { get; }
+        public DocumentProcessingFailureException(string message, string documentName, Exception innerException) : base(message)
+        {
+            DocumentName = documentName;
+            InnerException = innerException;
+        }
+    }
+
 }
