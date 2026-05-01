@@ -30,42 +30,16 @@ namespace inz.Service
             _logger = logger;
         }
 
-        public async Task<int> AddDocumentAsync(IFormFile file)
+        public async Task<int> AddDocumentAsync(CreateDocumentCommand command)
         {
-            var metadata = await ValidateInputDocumentMetadataAsync(file);
-            var documentName = metadata.DocumentName;
+            ValidateCommand(command);
 
-            _logger.LogInformation("{DocumentName}: Rozpoczęto dodawanie dokumentu.", documentName);
+            var metadata = await ValidateInputDocumentMetadataAsync(command.File);
 
-            try
-            {
-                metadata.StartProcessing();
+            metadata.AssignOwnership(command.OwnerId, command.OrganizationId);
 
-                await _documentRepository.AddDocumentMetadataAsync(metadata);
-
-                var blobKey = await _storage.AddDocumentToStorageAsync(file);
-
-                metadata.FinishProcessing(blobKey);
-
-                await _documentRepository.UpdateMetadataProcessingStatusAsync(
-                    metadata.Id,
-                    metadata.ProcessingStatus);
-
-                _logger.LogInformation("{DocumentName}: Zakończono dodawanie dokumentu.", documentName);
-
-                return metadata.Id;
-            }
-            catch (Exception ex)
-            {
-                await TryMarkAddingAsFailedAsync(metadata, documentName, ex);
-
-                throw new DocumentProcessingFailureException(
-                    $"{documentName}: Wystąpił błąd podczas dodawania dokumentu.",
-                    documentName,
-                    ex);
-            }
+            return await AddDocumentCoreAsync(metadata, command.File);
         }
-
         public async Task<Stream> GetDocumentByIdAsync(int documentId)
         {
             var metadata = await _documentRepository.GetMetadataByIdAsync(documentId);
@@ -210,13 +184,20 @@ namespace inz.Service
             }
             catch (Exception ex)
             {
-                if (existingMetadata.ProcessingStatus == ProcessStatus.PROCESSING_UPDATE)
+                try
                 {
-                    existingMetadata.FailUpdate();
+                    existingMetadata.FailUpdateFromAnyUpdateState();
 
                     await _documentRepository.UpdateMetadataProcessingStatusAsync(
                         metadataId,
                         existingMetadata.ProcessingStatus);
+                }
+                catch (Exception statusUpdateException)
+                {
+                    _logger.LogError(
+                        statusUpdateException,
+                        "{DocumentName}: Nie udało się oznaczyć aktualizacji jako nieudanej.",
+                        documentName);
                 }
 
                 _logger.LogError(
@@ -247,6 +228,38 @@ namespace inz.Service
             return await _fileReader.ReadFileAsync(file);
         }
 
+        private async Task<int> AddDocumentCoreAsync(DocumentMetadata metadata, IFormFile file)
+        {
+            var documentName = metadata.DocumentName;
+
+            _logger.LogInformation("{DocumentName}: Rozpoczęto dodawanie dokumentu.", documentName);
+
+            try
+            {
+                metadata.StartProcessing();
+
+                await _documentRepository.AddDocumentMetadataAsync(metadata);
+
+                var blobKey = await _storage.AddDocumentToStorageAsync(file);
+
+                metadata.FinishProcessing(blobKey);
+
+                await _documentRepository.UpdateDocumentMetadataAsync(metadata.Id, metadata);
+
+                _logger.LogInformation("{DocumentName}: Zakończono dodawanie dokumentu.", documentName);
+
+                return metadata.Id;
+            }
+            catch (Exception ex)
+            {
+                await TryMarkAddingAsFailedAsync(metadata, documentName, ex);
+
+                throw new DocumentProcessingFailureException(
+                    $"{documentName}: Wystąpił błąd podczas dodawania dokumentu.",
+                    documentName,
+                    ex);
+            }
+        }
         private static void ValidateMetadata(DocumentMetadata? documentMetadata, ProcessStatus expectedStatus)
         {
             if (documentMetadata is null)
@@ -286,6 +299,21 @@ namespace inz.Service
                 originalException,
                 "{DocumentName}: Dodawanie dokumentu zakończono błędem.",
                 documentName);
+        }
+
+        private static void ValidateCommand(CreateDocumentCommand command)
+        {
+            if (command is null)
+                throw new ArgumentNullException(nameof(command));
+
+            if (command.File is null)
+                throw new ArgumentNullException(nameof(command.File), "Nie przekazano pliku.");
+
+            if (string.IsNullOrWhiteSpace(command.OwnerId))
+                throw new UnauthorizedAccessException("Brak identyfikatora użytkownika.");
+
+            if (command.OrganizationId <= 0)
+                throw new UnauthorizedAccessException("Brak identyfikatora organizacji.");
         }
     }
 }
