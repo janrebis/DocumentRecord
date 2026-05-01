@@ -1,13 +1,11 @@
-﻿using System.Reflection.Metadata;
-
-namespace inz.Service
+﻿namespace inz.Service
 {
     public interface IDocumentContentStorage
     {
-        public Task AddDocumentToStorage(IFormFile file);
-        public Task<Stream> GetDocumentStream(string BlokKey);
-        public Task DeleteAsync(string BlobKey);
-        public Task<bool> ExistsAsync(string BlobKey);
-        public Task UpdateDocumentInStorageAsync(string BlobKey, IFormFile file);
+        Task<string> AddDocumentToStorageAsync(IFormFile file);
+        Task<Stream> GetDocumentStreamAsync(string blobKey);
+        Task DeleteAsync(string blobKey);
+        Task<bool> ExistsAsync(string blobKey);
+        Task UpdateDocumentInStorageAsync(string blobKey, IFormFile file);
     }
 }

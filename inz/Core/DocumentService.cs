@@ -1,227 +1,291 @@
-﻿using System.Security.Cryptography.X509Certificates;
-using inz.Core;
+﻿using inz.Core;
 using inz.Core.DocumentExceptions;
 using inz.Models;
 
 namespace inz.Service
 {
-
-    /*
-     TODO:
-     - Zamiast zmieniać ręcznie stan procespowania dokumentu, dodać state machine w DocumentMetadata
-     - Rozwiązać problem concurrency:
-        * dodać do DocumentRepository atomic update np. metodę TrySetStatusAsync
-        * w serwisach przerobić 
-     */
     public class DocumentService
     {
-        #region fields
         private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
             ".pdf",
             ".docx",
             ".txt"
         };
+
         private readonly IDocumentRepository _documentRepository;
         private readonly IDocumentContentStorage _storage;
         private readonly IFileReader _fileReader;
         private readonly ILogger<DocumentService> _logger;
-        #endregion
-        #region constructor
-        public DocumentService(IDocumentRepository documentRepository, IDocumentContentStorage storage, IFileReader fileReader, ILogger<DocumentService> logger) 
-        { 
+
+        public DocumentService(
+            IDocumentRepository documentRepository,
+            IDocumentContentStorage storage,
+            IFileReader fileReader,
+            ILogger<DocumentService> logger)
+        {
             _documentRepository = documentRepository;
-            _storage = storage; 
+            _storage = storage;
             _fileReader = fileReader;
             _logger = logger;
         }
-        #endregion
-        #region AddDocumentAsync
-        /// <summary>
-        /// Dodaje dokument do bazy danych. Pobiera z IFormFile metadane, waliduje prywatną metodą, następnie próbuje zapisać metadane do sql i plik do magazynu
-        /// </summary>
-        /// <param name="file">Dokument do zapisu</param>
-        /// <returns>Identyfikator dokumentu</returns>
-        /// <exception cref="DocumentProcessingFailureException">Wyrzucany w przypadku błędu podczas dodawania dokumentu</exception>
+
         public async Task<int> AddDocumentAsync(IFormFile file)
         {
-            var metadata = await ValidateInputDocumentMetadata(file); 
-            var metadataSaved = false; // ustawiam na true, żeby łatwiej obsłużyć sytuację, gdy błąd wystąpi po zapisaniu metadanych, a przed zapisaniem pliku do magazynu
-            var documentName = metadata.DocumentName; //pobieram nazwe dokumentu do logów
+            var metadata = await ValidateInputDocumentMetadataAsync(file);
+            var documentName = metadata.DocumentName;
 
-            _logger.LogInformation($"{documentName}: Rozpoczęto dodawanie dokumentu", documentName);
-
-            try
-            {
-                metadata.StartProcessing(); //ustawiam status na processing, żeby w bazie był od razu widoczny, że dokument jest w trakcie dodawania
-                await _documentRepository.AddDocumentMetadata(metadata); 
-                metadataSaved = true; //ustawiam true jeśli uda sie zapis do bazy
-
-                await _storage.AddDocumentToStorage(file);
-                metadata.FinishProcessing();
-                await _documentRepository.UpdateMetadataProcessingStatus(metadata.Id, metadata.ProcessingStatus); 
-                _logger.LogInformation($"{documentName}: Zakończono dodawanie dokumentu. Jest teraz w pełni dostępny", documentName);
-            }
-
-            catch (Exception e)
-            {
-                if (metadataSaved) 
-                {
-                    metadata.FailProcessing();
-                    await _documentRepository.UpdateMetadataProcessingStatus(metadata.Id, metadata.ProcessingStatus);
-                }
-                _logger.LogError(e, $"{documentName}: Dodawanie dokumentu zakończono błędem", documentName);
-                throw new DocumentProcessingFailureException($"{documentName}: Wystąpił błąd podczas dodawania dokumentu.", documentName, e);
-            }
-
-            return metadata.Id;
-        }
-        #endregion
-        #region GetDocumentByIdAsync
-        /// <summary>
-        /// Metoda pobiera dane dokumentu na podstawie jego identyfikatora
-        /// </summary>
-        /// <param name="documentId">Identyfikator dokumentu</param>
-        /// <returns>Strumień z danymi dokumentu</returns>
-        /// <exception cref="DocumentRetrievalFailureException">Rzucany w przypadku błędu podczas pobierania dokumentu</exception>
-        public async Task<Stream> GetDocumentByIdAsync(int documentId)
-        {
-            var metadata = await _documentRepository.GetMetadaById(documentId); 
-            ValidateMetadata(metadata, ProcessStatus.AVAILABLE); //Sprawdzam czy dokument jest dostępny do pobrania i odczytu
+            _logger.LogInformation("{DocumentName}: Rozpoczęto dodawanie dokumentu.", documentName);
 
             try
             {
-                return await _storage.GetDocumentStream(metadata.BlobKey);
+                metadata.StartProcessing();
+
+                await _documentRepository.AddDocumentMetadataAsync(metadata);
+
+                var blobKey = await _storage.AddDocumentToStorageAsync(file);
+
+                metadata.FinishProcessing(blobKey);
+
+                await _documentRepository.UpdateMetadataProcessingStatusAsync(
+                    metadata.Id,
+                    metadata.ProcessingStatus);
+
+                _logger.LogInformation("{DocumentName}: Zakończono dodawanie dokumentu.", documentName);
+
+                return metadata.Id;
             }
             catch (Exception ex)
             {
-                throw new DocumentRetrievalFailureException($"{metadata.DocumentName}: Nie udało się pobrać dokumentu.", metadata.DocumentName, ex);
+                await TryMarkAddingAsFailedAsync(metadata, documentName, ex);
+
+                throw new DocumentProcessingFailureException(
+                    $"{documentName}: Wystąpił błąd podczas dodawania dokumentu.",
+                    documentName,
+                    ex);
             }
         }
-        #endregion
-        #region DeleteDocumentAsync
-        /// <summary>
-        /// Metoda usuwa dokument z bazy danych
-        /// </summary>
-        /// <param name="documentId">Identyfikator dokumentu</param>
-        /// <returns></returns>
-        /// <exception cref="DocumentDeletionFailureException">Rzucany w przypadku błędu podczas usuwania dokumentu</exception>
+
+        public async Task<Stream> GetDocumentByIdAsync(int documentId)
+        {
+            var metadata = await _documentRepository.GetMetadataByIdAsync(documentId);
+
+            ValidateMetadata(metadata, ProcessStatus.AVAILABLE);
+
+            try
+            {
+                return await _storage.GetDocumentStreamAsync(metadata.BlobKey);
+            }
+            catch (Exception ex)
+            {
+                throw new DocumentRetrievalFailureException(
+                    $"{metadata.DocumentName}: Nie udało się pobrać dokumentu.",
+                    metadata.DocumentName,
+                    ex);
+            }
+        }
+
+        public async Task MarkDocumentToDeleteAsync(int documentId)
+        {
+            var metadata = await _documentRepository.GetMetadataByIdAsync(documentId);
+
+            ValidateMetadata(metadata, ProcessStatus.AVAILABLE);
+
+            metadata.MarkToDelete();
+
+            await _documentRepository.UpdateMetadataProcessingStatusAsync(
+                metadata.Id,
+                metadata.ProcessingStatus);
+
+            _logger.LogInformation(
+                "{DocumentName}: Dokument oznaczono do usunięcia.",
+                metadata.DocumentName);
+        }
+
         public async Task DeleteDocumentAsync(int documentId)
         {
-            var metadata = await _documentRepository.GetMetadaById(documentId);
+            var metadata = await _documentRepository.GetMetadataByIdAsync(documentId);
+
+            if (metadata is null)
+                throw new DocumentMetadataNotFoundException("Nie znaleziono danych dokumentu.");
+
             metadata.EnsureMarkedToDelete();
 
             var metadataId = metadata.Id;
             var documentName = metadata.DocumentName;
             var blobKey = metadata.BlobKey;
 
-            var blobExists = await _storage.ExistsAsync(blobKey);
-
-            if (!blobExists)
-            {
-                metadata.MarkDeleted();
-                await _documentRepository.UpdateMetadataProcessingStatus(metadataId, metadata.ProcessingStatus);
-                return;
-            }
-
             try
             {
-                await _storage.DeleteAsync(blobKey);
+                var blobExists = await _storage.ExistsAsync(blobKey);
+
+                if (blobExists)
+                {
+                    await _storage.DeleteAsync(blobKey);
+                }
+
                 metadata.MarkDeleted();
 
-                await _documentRepository.UpdateMetadataProcessingStatus( metadataId, metadata.ProcessingStatus);
-            }
-            catch (Exception e)
-            {
-                _logger.LogError(e, "{documentName}: Nie udało się usunąć dokumentu z magazynu.", documentName);
+                await _documentRepository.UpdateMetadataProcessingStatusAsync(
+                    metadataId,
+                    metadata.ProcessingStatus);
 
+                _logger.LogInformation("{DocumentName}: Dokument usunięty.", documentName);
+            }
+            catch (Exception ex)
+            {
                 metadata.FailDelete();
 
-                await _documentRepository.UpdateMetadataProcessingStatus( metadataId, metadata.ProcessingStatus);
+                await _documentRepository.UpdateMetadataProcessingStatusAsync(
+                    metadataId,
+                    metadata.ProcessingStatus);
 
-                throw new DocumentDeletionFailureException(  $"{documentName}: Wystąpił błąd podczas usuwania dokumentu.", documentName, e);
+                _logger.LogError(
+                    ex,
+                    "{DocumentName}: Wystąpił błąd podczas usuwania dokumentu.",
+                    documentName);
+
+                throw new DocumentDeletionFailureException(
+                    $"{documentName}: Wystąpił błąd podczas usuwania dokumentu.",
+                    documentName,
+                    ex);
             }
-
         }
-        #endregion
-        #region UpdateDocumentAsync
-        /// <summary>
-        /// Metoda aktualizuje 
-        /// </summary>
-        /// <param name="documentId">Identyfikator dokumentu</param>
-        /// <param name="file">dokument którym aktualizujemy bieżący dokument</param>
-        /// <returns>Identyfikator dokumentur</returns>
-        /// <exception cref="DocumentNotFoundException">Wyjątek zwracany, gdy dokument nie zostanie znaleziony</exception>
-        /// <exception cref="DocumentProcessingFailureException">Wyjątek zwracany, gdy wystąpi błąd podczas przetwarzania dokumentu</exception>
-        
 
         public async Task<int> UpdateDocumentAsync(int documentId, IFormFile file)
         {
-            _logger.LogInformation("Rozpoczęcie aktualizacji dokumentu o id {DocumentId}.", documentId);
+            _logger.LogInformation(
+                "Rozpoczęto aktualizację dokumentu o id {DocumentId}.",
+                documentId);
 
-            var newMetadata = await ValidateInputDocumentMetadata(file);
-            var existingMetadata = await _documentRepository.GetMetadaById(documentId);
+            var newMetadata = await ValidateInputDocumentMetadataAsync(file);
+
+            var existingMetadata = await _documentRepository.GetMetadataByIdAsync(documentId);
+
             ValidateMetadata(existingMetadata, ProcessStatus.AVAILABLE);
 
             var metadataId = existingMetadata.Id;
             var documentName = existingMetadata.DocumentName;
             var blobKey = existingMetadata.BlobKey;
 
-            existingMetadata.StartUpdate();
-
-            var blobExists = await _storage.ExistsAsync(blobKey);
-
-            if (!blobExists)
-            {
-                existingMetadata.FailUpdate();
-
-                _logger.LogWarning("Dokument o id {DocumentId} nie został znaleziony w magazynie. Ustawiono status FAILED_UPDATE.", metadataId);
-                throw new DocumentNotFoundException("Dokument nie został znaleziony w magazynie.");
-            }
-
             try
             {
+                existingMetadata.StartUpdate();
+
+                await _documentRepository.UpdateMetadataProcessingStatusAsync(
+                    metadataId,
+                    existingMetadata.ProcessingStatus);
+
+                var blobExists = await _storage.ExistsAsync(blobKey);
+
+                if (!blobExists)
+                {
+                    existingMetadata.FailUpdate();
+
+                    await _documentRepository.UpdateMetadataProcessingStatusAsync(
+                        metadataId,
+                        existingMetadata.ProcessingStatus);
+
+                    throw new DocumentNotFoundException(
+                        $"{documentName}: Dokument nie został znaleziony w magazynie.");
+                }
+
                 await _storage.UpdateDocumentInStorageAsync(blobKey, file);
 
-                newMetadata.Id = metadataId;
-                newMetadata.BlobKey = blobKey;
-                newMetadata.StartUpdate();
-                newMetadata.FinishUpdate();
+                existingMetadata.FinishUpdate(newMetadata);
 
-                await _documentRepository.UpdateDocumentMetadataAsync(metadataId, newMetadata);
+                await _documentRepository.UpdateDocumentMetadataAsync(
+                    metadataId,
+                    existingMetadata);
+
+                _logger.LogInformation(
+                    "Zakończono aktualizację dokumentu o id {DocumentId}.",
+                    metadataId);
+
+                return metadataId;
             }
-            catch (Exception e)
+            catch (DocumentNotFoundException)
             {
-                existingMetadata.FailUpdate();
-                _logger.LogError( e, "{DocumentName}: Wystąpił błąd podczas aktualizacji dokumentu.", documentName);
-                throw new DocumentProcessingFailureException($"{documentName}: Wystąpił błąd podczas aktualizacji dokumentu.", documentName, e);
+                throw;
             }
-            _logger.LogInformation( "Zakończono aktualizację dokumentu o id {DocumentId}.", metadataId);
+            catch (Exception ex)
+            {
+                if (existingMetadata.ProcessingStatus == ProcessStatus.PROCESSING_UPDATE)
+                {
+                    existingMetadata.FailUpdate();
 
-            return metadataId;
+                    await _documentRepository.UpdateMetadataProcessingStatusAsync(
+                        metadataId,
+                        existingMetadata.ProcessingStatus);
+                }
+
+                _logger.LogError(
+                    ex,
+                    "{DocumentName}: Wystąpił błąd podczas aktualizacji dokumentu.",
+                    documentName);
+
+                throw new DocumentProcessingFailureException(
+                    $"{documentName}: Wystąpił błąd podczas aktualizacji dokumentu.",
+                    documentName,
+                    ex);
+            }
         }
 
-        #endregion
-        #region privateMethods
-        private async Task<DocumentMetadata> ValidateInputDocumentMetadata(IFormFile file) {
+        private async Task<DocumentMetadata> ValidateInputDocumentMetadataAsync(IFormFile file)
+        {
+            if (file is null)
+                throw new ArgumentNullException(nameof(file), "Nie przekazano żadnego pliku.");
 
-            if (file == null) throw new ArgumentNullException(nameof(file), "Nie przekazano żadnego pliku");
-            if (file.Length == 0) throw new EmptyDocumentException("Plik jest pusty");
+            if (file.Length == 0)
+                throw new EmptyDocumentException("Plik jest pusty.");
 
             var extension = Path.GetExtension(file.FileName);
 
-            if (!AllowedExtensions.Contains(extension)) throw new UnsupportedDocumentTypeException("Nieobsługiwany typ pliku.");
+            if (!AllowedExtensions.Contains(extension))
+                throw new UnsupportedDocumentTypeException("Nieobsługiwany typ pliku.");
 
-            //TODO: dodać implementacje ReadFile, aby zwracało poprawne metadane, ustawiam domyślnie status processing w Modelu obiektu
-            return await _fileReader.ReadFile(file);
+            return await _fileReader.ReadFileAsync(file);
         }
 
-        private void ValidateMetadata(DocumentMetadata? documentMetadata, ProcessStatus expectedStatus)
+        private static void ValidateMetadata(DocumentMetadata? documentMetadata, ProcessStatus expectedStatus)
         {
-            if (documentMetadata is null) throw new DocumentMetadataNotFoundException("Nie znaleziono danych dokumentu.");
-            if (documentMetadata.ProcessingStatus != expectedStatus) throw new DocumentUnavailableException($"{documentMetadata.DocumentName}: Dokument aktualnie nie jest dostępny do tej akcji", documentMetadata.DocumentName);
-        }
-        #endregion
+            if (documentMetadata is null)
+                throw new DocumentMetadataNotFoundException("Nie znaleziono danych dokumentu.");
 
+            if (documentMetadata.ProcessingStatus != expectedStatus)
+                throw new DocumentUnavailableException(
+                    $"{documentMetadata.DocumentName}: Dokument aktualnie nie jest dostępny do tej akcji.",
+                    documentMetadata.DocumentName);
+        }
+
+        private async Task TryMarkAddingAsFailedAsync(
+            DocumentMetadata metadata,
+            string documentName,
+            Exception originalException)
+        {
+            try
+            {
+                if (metadata.ProcessingStatus == ProcessStatus.PROCESSING)
+                {
+                    metadata.FailProcessing();
+
+                    await _documentRepository.UpdateMetadataProcessingStatusAsync(
+                        metadata.Id,
+                        metadata.ProcessingStatus);
+                }
+            }
+            catch (Exception statusUpdateException)
+            {
+                _logger.LogError(
+                    statusUpdateException,
+                    "{DocumentName}: Nie udało się oznaczyć dodawania dokumentu jako nieudanego.",
+                    documentName);
+            }
+
+            _logger.LogError(
+                originalException,
+                "{DocumentName}: Dodawanie dokumentu zakończono błędem.",
+                documentName);
+        }
     }
 }

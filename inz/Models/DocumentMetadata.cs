@@ -8,58 +8,92 @@ namespace inz.Service
     {
         [Key]
         public int Id { get; set; }
+
         public Guid PublicId { get; set; } = Guid.NewGuid();
+
         public string DocumentName { get; set; } = string.Empty;
-        public string BlobKey { get; set; } = default!;
+
+        public string BlobKey { get; set; } = string.Empty;
+
         public ProcessStatus ProcessingStatus { get; private set; } = ProcessStatus.NEW_FILE;
 
-        public void StartProcessing() 
+        public void StartProcessing()
         {
-            if (ProcessingStatus != ProcessStatus.NEW_FILE) throw new DocumentWrongStatusException($"{DocumentName}: Nie można zakończyć dodawania dokumentu, bo nie jest nowym dokumentem.", DocumentName);
-            ProcessingStatus = ProcessStatus.PROCESSING; 
+            if (ProcessingStatus != ProcessStatus.NEW_FILE)
+                throw new DocumentWrongStatusException($"{DocumentName}: Dokument nie jest nowym plikiem.", DocumentName);
+
+            ProcessingStatus = ProcessStatus.PROCESSING;
         }
-        public void FinishProcessing() 
+
+        public void FinishProcessing(string blobKey)
         {
-            if (ProcessingStatus != ProcessStatus.PROCESSING)  throw new DocumentWrongStatusException($"{DocumentName}: Nie można zakończyć dodawania dokumentu, bo dokument nie jest przetwarzany.", DocumentName);
-            ProcessingStatus = ProcessStatus.AVAILABLE; 
+            if (ProcessingStatus != ProcessStatus.PROCESSING)
+                throw new DocumentWrongStatusException($"{DocumentName}: Dokument nie jest w trakcie dodawania.", DocumentName);
+
+            BlobKey = blobKey;
+            ProcessingStatus = ProcessStatus.AVAILABLE;
         }
-        public void FailProcessing() 
+
+        public void FailProcessing()
         {
-            if (ProcessingStatus != ProcessStatus.PROCESSING) throw new DocumentWrongStatusException($"{DocumentName}: Nie można oznaczyć dodawania jako nieudanego, bo dokument nie jest przetwarzany.", DocumentName);
-            ProcessingStatus = ProcessStatus.FAILED_TO_ADD; 
+            if (ProcessingStatus != ProcessStatus.PROCESSING)
+                throw new DocumentWrongStatusException($"{DocumentName}: Dokument nie jest w trakcie dodawania.", DocumentName);
+
+            ProcessingStatus = ProcessStatus.FAILED_TO_ADD;
         }
+
+        public void MarkToDelete()
+        {
+            if (ProcessingStatus != ProcessStatus.AVAILABLE)
+                throw new DocumentUnavailableException($"{DocumentName}: Dokument nie może zostać oznaczony do usunięcia.", DocumentName);
+
+            ProcessingStatus = ProcessStatus.MARKED_TO_DELETE;
+        }
+
         public void EnsureMarkedToDelete()
         {
-            if (ProcessingStatus != ProcessStatus.MARKED_TO_DELETE) throw new DocumentUnavailableException( $"{DocumentName}: Dokument nie jest oznaczony do usunięcia.", DocumentName);
+            if (ProcessingStatus != ProcessStatus.MARKED_TO_DELETE)
+                throw new DocumentUnavailableException($"{DocumentName}: Dokument nie jest oznaczony do usunięcia.", DocumentName);
         }
 
         public void MarkDeleted()
         {
-            if (ProcessingStatus != ProcessStatus.MARKED_TO_DELETE) throw new DocumentWrongStatusException( $"{DocumentName}: Nie można oznaczyć jako usunięty.", DocumentName);
+            if (ProcessingStatus != ProcessStatus.MARKED_TO_DELETE)
+                throw new DocumentWrongStatusException($"{DocumentName}: Nie można oznaczyć dokumentu jako usunięty.", DocumentName);
+
             ProcessingStatus = ProcessStatus.DELETED;
         }
 
         public void FailDelete()
         {
-            if (ProcessingStatus != ProcessStatus.MARKED_TO_DELETE) throw new DocumentWrongStatusException($"{DocumentName}: Nie można oznaczyć usuwania jako nieudanego.", DocumentName);
+            if (ProcessingStatus != ProcessStatus.MARKED_TO_DELETE)
+                throw new DocumentWrongStatusException($"{DocumentName}: Nie można oznaczyć usuwania jako nieudanego.", DocumentName);
+
             ProcessingStatus = ProcessStatus.FAILED_TO_DELETE;
         }
 
         public void StartUpdate()
         {
-            if (ProcessingStatus != ProcessStatus.AVAILABLE) throw new DocumentUnavailableException($"{DocumentName}: Dokument nie jest dostępny do aktualizacji.", DocumentName);
+            if (ProcessingStatus != ProcessStatus.AVAILABLE)
+                throw new DocumentUnavailableException($"{DocumentName}: Dokument nie jest dostępny do aktualizacji.", DocumentName);
+
             ProcessingStatus = ProcessStatus.PROCESSING_UPDATE;
         }
 
-        public void FinishUpdate()
+        public void FinishUpdate(DocumentMetadata newMetadata)
         {
-            if (ProcessingStatus != ProcessStatus.PROCESSING_UPDATE) throw new DocumentWrongStatusException($"{DocumentName}: Nie można zakończyć aktualizacji, bo dokument nie jest w trakcie aktualizacji.", DocumentName);
+            if (ProcessingStatus != ProcessStatus.PROCESSING_UPDATE)
+                throw new DocumentWrongStatusException($"{DocumentName}: Dokument nie jest w trakcie aktualizacji.", DocumentName);
+
+            DocumentName = newMetadata.DocumentName;
             ProcessingStatus = ProcessStatus.AVAILABLE;
         }
 
         public void FailUpdate()
         {
-            if (ProcessingStatus != ProcessStatus.PROCESSING_UPDATE) throw new DocumentWrongStatusException($"{DocumentName}: Nie można oznaczyć aktualizacji jako nieudanej, bo dokument nie jest w trakcie aktualizacji.", DocumentName);
+            if (ProcessingStatus != ProcessStatus.PROCESSING_UPDATE)
+                throw new DocumentWrongStatusException($"{DocumentName}: Dokument nie jest w trakcie aktualizacji.", DocumentName);
+
             ProcessingStatus = ProcessStatus.FAILED_TO_UPDATE;
         }
     }
