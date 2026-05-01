@@ -16,7 +16,8 @@ namespace inz.Service
         public string BlobKey { get; set; } = string.Empty;
 
         public ProcessStatus ProcessingStatus { get; private set; } = ProcessStatus.NEW_FILE;
-
+        public string OwnerId { get; private set; } = string.Empty;
+        public int OrganizationId { get; private set; }
         public void StartProcessing()
         {
             if (ProcessingStatus != ProcessStatus.NEW_FILE)
@@ -93,6 +94,31 @@ namespace inz.Service
         {
             if (ProcessingStatus != ProcessStatus.PROCESSING_UPDATE)
                 throw new DocumentWrongStatusException($"{DocumentName}: Dokument nie jest w trakcie aktualizacji.", DocumentName);
+
+            ProcessingStatus = ProcessStatus.FAILED_TO_UPDATE;
+        }
+
+        public void AssignOwnership(string ownerId, int organizationId)
+        {
+            if (string.IsNullOrWhiteSpace(ownerId))
+                throw new ArgumentException("OwnerId jest wymagany.", nameof(ownerId));
+
+            if (organizationId <= 0)
+                throw new ArgumentException("OrganizationId jest wymagany.", nameof(organizationId));
+
+            OwnerId = ownerId;
+            OrganizationId = organizationId;
+        }
+
+        public void FailUpdateFromAnyUpdateState()
+        {
+            if (ProcessingStatus != ProcessStatus.PROCESSING_UPDATE &&
+                ProcessingStatus != ProcessStatus.AVAILABLE)
+            {
+                throw new DocumentWrongStatusException(
+                    $"{DocumentName}: Nie można oznaczyć aktualizacji jako nieudanej.",
+                    DocumentName);
+            }
 
             ProcessingStatus = ProcessStatus.FAILED_TO_UPDATE;
         }
