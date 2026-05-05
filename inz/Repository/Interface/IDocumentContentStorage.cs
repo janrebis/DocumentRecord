@@ -1,4 +1,4 @@
-﻿namespace inz.Service
+﻿namespace inz.Repository.Interface
 {
     public interface IDocumentContentStorage
     {

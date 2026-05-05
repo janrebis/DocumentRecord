@@ -1,6 +1,7 @@
 ﻿using inz.Models;
+using inz.Models.Enums;
 
-namespace inz.Service
+namespace inz.Repository.Interface
 {
     public interface IDocumentRepository
     {

@@ -1,10 +1,14 @@
-﻿using inz.Core;
-using inz.Core.DocumentExceptions;
+﻿using inz.DocumentExceptions;
 using inz.Models;
+using inz.Models.Enums;
+using inz.Repository.Interface;
+using inz.Services.Interface;
 
-namespace inz.Service
+namespace inz.Services.Implementation
 {
-    public class DocumentService
+    //TODO: Czy robić sprawdzenie commada w obecnej formie
+    public class DocumentService : IDocumentService
+
     {
         private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -34,7 +38,7 @@ namespace inz.Service
         {
             ValidateCommand(command);
 
-            var metadata = await ValidateInputDocumentMetadataAsync(command.File);
+            var metadata = await ValidateInputDocumentAsync(command.File);
 
             metadata.AssignOwnership(command.OwnerId, command.OrganizationId);
 
@@ -132,7 +136,7 @@ namespace inz.Service
                 "Rozpoczęto aktualizację dokumentu o id {DocumentId}.",
                 documentId);
 
-            var newMetadata = await ValidateInputDocumentMetadataAsync(file);
+            var newMetadata = await ValidateInputDocumentAsync(file);
 
             var existingMetadata = await _documentRepository.GetMetadataByIdAsync(documentId);
 
@@ -212,7 +216,7 @@ namespace inz.Service
             }
         }
 
-        private async Task<DocumentMetadata> ValidateInputDocumentMetadataAsync(IFormFile file)
+        private async Task<DocumentMetadata> ValidateInputDocumentAsync(IFormFile file)
         {
             if (file is null)
                 throw new ArgumentNullException(nameof(file), "Nie przekazano żadnego pliku.");
@@ -248,7 +252,6 @@ namespace inz.Service
 
                 _logger.LogInformation("{DocumentName}: Zakończono dodawanie dokumentu.", documentName);
 
-                return metadata.Id;
             }
             catch (Exception ex)
             {
@@ -259,6 +262,8 @@ namespace inz.Service
                     documentName,
                     ex);
             }
+
+            return metadata.Id;
         }
         private static void ValidateMetadata(DocumentMetadata? documentMetadata, ProcessStatus expectedStatus)
         {
@@ -301,15 +306,14 @@ namespace inz.Service
                 documentName);
         }
 
+
+        //te testy do przemyślenia
         private static void ValidateCommand(CreateDocumentCommand command)
         {
             if (command is null)
                 throw new ArgumentNullException(nameof(command));
 
-            if (command.File is null)
-                throw new ArgumentNullException(nameof(command.File), "Nie przekazano pliku.");
-
-            if (string.IsNullOrWhiteSpace(command.OwnerId))
+            if (command.OwnerId <= 0)
                 throw new UnauthorizedAccessException("Brak identyfikatora użytkownika.");
 
             if (command.OrganizationId <= 0)

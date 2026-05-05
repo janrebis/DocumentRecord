@@ -1,8 +1,8 @@
 ﻿using System.ComponentModel.DataAnnotations;
-using inz.Core.DocumentExceptions;
-using inz.Models;
+using inz.DocumentExceptions;
+using inz.Models.Enums;
 
-namespace inz.Service
+namespace inz.Models
 {
     public class DocumentMetadata
     {
@@ -16,8 +16,9 @@ namespace inz.Service
         public string BlobKey { get; set; } = string.Empty;
 
         public ProcessStatus ProcessingStatus { get; private set; } = ProcessStatus.NEW_FILE;
-        public string OwnerId { get; private set; } = string.Empty;
+        public int OwnerId { get; private set; }
         public int OrganizationId { get; private set; }
+
         public void StartProcessing()
         {
             if (ProcessingStatus != ProcessStatus.NEW_FILE)
@@ -98,9 +99,9 @@ namespace inz.Service
             ProcessingStatus = ProcessStatus.FAILED_TO_UPDATE;
         }
 
-        public void AssignOwnership(string ownerId, int organizationId)
+        public void AssignOwnership(int ownerId, int organizationId)
         {
-            if (string.IsNullOrWhiteSpace(ownerId))
+            if (organizationId <= 0)
                 throw new ArgumentException("OwnerId jest wymagany.", nameof(ownerId));
 
             if (organizationId <= 0)

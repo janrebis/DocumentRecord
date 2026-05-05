@@ -1,4 +1,4 @@
-﻿namespace inz.Models
+﻿namespace inz.Models.Enums
 {
     public enum ProcessStatus
     {

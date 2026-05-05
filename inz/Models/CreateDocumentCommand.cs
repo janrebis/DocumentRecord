@@ -1,9 +1,9 @@
-﻿namespace inz.Core
+﻿namespace inz.Models
 {
     public sealed class CreateDocumentCommand
     {
         public IFormFile File { get; init; } = default!;
-        public string OwnerId { get; init; } = string.Empty;
+        public int OwnerId { get; init; } = default;
         public int OrganizationId { get; init; }
     }
 }

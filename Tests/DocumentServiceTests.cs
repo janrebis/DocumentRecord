@@ -1,8 +1,9 @@
 ﻿using FluentAssertions;
-using inz.Core;
-using inz.Core.DocumentExceptions;
+using inz.DocumentExceptions;
 using inz.Models;
-using inz.Service;
+using inz.Models.Enums;
+using inz.Repository.Interface;
+using inz.Services.Implementation;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -138,7 +139,7 @@ namespace inz.Tests
             var command = new CreateDocumentCommand
             {
                 File = null!,
-                OwnerId = "user-1",
+                OwnerId = 1,
                 OrganizationId = 1
             };
 
@@ -152,27 +153,12 @@ namespace inz.Tests
         }
 
         [Fact]
-        public async Task AddDocumentAsync_ShouldThrowUnauthorizedAccessException_WhenOwnerIdIsMissing()
-        {
-            var command = new CreateDocumentCommand
-            {
-                File = CreateFormFile("document.pdf"),
-                OwnerId = "",
-                OrganizationId = 1
-            };
-
-            Func<Task> act = async () => await _documentService.AddDocumentAsync(command);
-
-            await act.Should().ThrowAsync<UnauthorizedAccessException>();
-        }
-
-        [Fact]
         public async Task AddDocumentAsync_ShouldThrowUnauthorizedAccessException_WhenOrganizationIdIsInvalid()
         {
             var command = new CreateDocumentCommand
             {
                 File = CreateFormFile("document.pdf"),
-                OwnerId = "user-1",
+                OwnerId = 1,
                 OrganizationId = 0
             };
 
@@ -747,7 +733,7 @@ namespace inz.Tests
             return new CreateDocumentCommand
             {
                 File = file,
-                OwnerId = "user-1",
+                OwnerId = 1,
                 OrganizationId = 1
             };
         }

@@ -1,6 +1,6 @@
-﻿using inz.Service;
+﻿using inz.Models;
 
-namespace inz.Core
+namespace inz.Repository.Interface
 {
     public interface IFileReader
     {

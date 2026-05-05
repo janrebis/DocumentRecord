@@ -1,4 +1,4 @@
-﻿namespace inz.Core.DocumentExceptions
+﻿namespace inz.DocumentExceptions
 {
     public abstract class DocumentException : Exception
     {
