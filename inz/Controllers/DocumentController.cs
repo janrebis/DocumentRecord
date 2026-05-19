@@ -1,51 +1,73 @@
-﻿using inz.Services.Interface;
+﻿using inz.Models;
+using inz.Services.Interface;
 using Microsoft.AspNetCore.Mvc;
 
-namespace inz.Controllers
+namespace inz.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public class DocumentController : ControllerBase
 {
-    [ApiController]
-    [Route("api/[controller]")]
-    public class DocumentController : Controller
+    private readonly IDocumentService _documentService;
+
+    public DocumentController(IDocumentService documentService)
     {
-        private readonly IDocumentService _documentService;
+        _documentService = documentService;
+    }
 
-        public DocumentController(IDocumentService documentService)
+    [HttpGet("test")]
+    public IActionResult Test()
+    {
+        return Ok("Documents controller działa");
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> AddDocument([FromForm] IFormFile file)
+    {
+        var command = new CreateDocumentCommand
         {
-            _documentService = documentService;
-        }
-        [HttpPost]
-        public async Task<IActionResult> AddDocument(IFormFile file)
-        {
-            var command = new Models.CreateDocumentCommand
-            {
-                File = file,
-                OwnerId = 1,
-                OrganizationId = 1//tu domyślnie z requesta
-            };
-            var documentId = await _documentService.AddDocumentAsync(command);
+            File = file,
+            OwnerId = 1,
+            OrganizationId = 1
+        };
 
-            return CreatedAtAction(nameof(GetDocument), new { id = documentId }, new { id = documentId });
-        }
+        var documentId = await _documentService.AddDocumentAsync(command);
 
-        [HttpGet("{id}")]
-        public async Task<IActionResult> GetDocument(int id)
-        {
-            var document = await _documentService.GetDocumentByIdAsync(id);
+        return CreatedAtAction(
+            nameof(GetDocument),
+            new { id = documentId },
+            new { id = documentId });
+    }
 
-            return File(document, "application/octet-stream");
-        }
+    [HttpGet("{id:int}")]
+    public async Task<IActionResult> GetDocument(int id)
+    {
+        var document = await _documentService.GetDocumentByIdAsync(id);
 
-        [HttpPatch("{id}/mark-to-delete")]
-        public async Task<IActionResult> MarkDocumentToDelete(int id)
-        {
-            await _documentService.MarkDocumentToDeleteAsync(id);
-            return NoContent();
-        }
-        [HttpPost("{id}/update")]
-        public async Task<IActionResult> UpdateDocument(int id, IFormFile file)
-        { 
-            var document = await _documentService.UpdateDocumentAsync(id, file);
-            return Ok(document);
-        }
+        return File(document, "application/octet-stream");
+    }
+
+    [HttpPatch("{id:int}/mark-to-delete")]
+    public async Task<IActionResult> MarkDocumentToDelete(int id)
+    {
+        await _documentService.MarkDocumentToDeleteAsync(id);
+
+        return NoContent();
+    }
+
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> DeleteDocument(int id)
+    {
+        await _documentService.DeleteDocumentAsync(id);
+
+        return NoContent();
+    }
+
+    [HttpPost("{id:int}/update")]
+    public async Task<IActionResult> UpdateDocument(int id, [FromForm] IFormFile file)
+    {
+        var documentId = await _documentService.UpdateDocumentAsync(id, file);
+
+        return Ok(new { id = documentId });
     }
 }

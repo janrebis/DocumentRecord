@@ -1,37 +1,43 @@
-﻿using inz.Models;
-using inz.Models.Enums;
+﻿using inz.DocumentExceptions;
+using inz.Models;
 using inz.Repository.Interface;
 
-namespace inz.Repository.Implementations
+namespace inz.Repository.Implementations;
+
+public class InMemoryDocumentRepository : IDocumentRepository
 {
-    public class InMemoryDocumentRepository : IDocumentRepository
+    private readonly Dictionary<int, DocumentMetadata> _database = new();
+    private int _idIncrementator = 1;
 
+    public Task<int> AddDocumentMetadataAsync(DocumentMetadata documentMetadata)
     {
-        private readonly Dictionary<int, DocumentMetadata> _inMemoryDocumentDatabase = new();
-        int idIncrementator = 1;
-        public Task AddDocumentMetadataAsync(DocumentMetadata documentMetadata)
-        {
-            _inMemoryDocumentDatabase.Add(idIncrementator, documentMetadata);
-            idIncrementator++;
-            return Task.CompletedTask;
-        }
+        var id = _idIncrementator;
 
-        public Task<DocumentMetadata?> GetMetadataByIdAsync(int documentMetadataId)
-        {
-            _inMemoryDocumentDatabase.TryGetValue(documentMetadataId, out var document);
-            return Task.FromResult(document);
-        }
+        documentMetadata.Id = id;
 
-        public Task UpdateDocumentMetadataAsync(int documentMetadataId, DocumentMetadata documentMetadata)
-        {
-            _inMemoryDocumentDatabase[documentMetadataId] = documentMetadata;
-            return Task.CompletedTask;
-        }
+        _database.Add(id, documentMetadata);
 
-        public Task UpdateMetadataProcessingStatusAsync(int documentMetadataId, ProcessStatus processingStatus)
-        {
-            _inMemoryDocumentDatabase.Remove(documentMetadataId);
-            return Task.CompletedTask;
-        }
+        _idIncrementator++;
+
+        return Task.FromResult(id);
+    }
+
+    public Task<DocumentMetadata?> GetMetadataByIdAsync(int documentMetadataId)
+    {
+        _database.TryGetValue(documentMetadataId, out var document);
+
+        return Task.FromResult(document);
+    }
+
+    public Task UpdateDocumentMetadataAsync(int documentMetadataId, DocumentMetadata documentMetadata)
+    {
+        if (!_database.ContainsKey(documentMetadataId))
+            throw new DocumentMetadataNotFoundException("Nie znaleziono danych dokumentu.");
+
+        documentMetadata.Id = documentMetadataId;
+
+        _database[documentMetadataId] = documentMetadata;
+
+        return Task.CompletedTask;
     }
 }

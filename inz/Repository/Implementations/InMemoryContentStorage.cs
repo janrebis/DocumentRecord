@@ -1,43 +1,58 @@
-﻿using System.Reflection.Metadata;
-using inz.Models;
+﻿using inz.DocumentExceptions;
 using inz.Repository.Interface;
 
-namespace inz.Repository.Implementations
+namespace inz.Repository.Implementations;
+
+public class InMemoryContentStorage : IDocumentContentStorage
 {
-    public class InMemoryContentStorage : IDocumentContentStorage
+    private readonly Dictionary<string, byte[]> _storage = new();
 
+    public async Task<string> AddDocumentToStorageAsync(IFormFile file)
     {
-        private readonly Dictionary<string, IFormFile> _inMemoryContentStorage = new();
+        var blobKey = Guid.NewGuid().ToString();
 
-        public Task<string> AddDocumentToStorageAsync(IFormFile file)
-        {
-            string id = Guid.NewGuid().ToString();
-            _inMemoryContentStorage.Add(id, file);
-            return Task.FromResult(id);
-        }
+        await using var inputStream = file.OpenReadStream();
+        using var memoryStream = new MemoryStream();
 
-        public Task DeleteAsync(string blobKey)
-        {
-            _inMemoryContentStorage.Remove(blobKey);
-            return Task.CompletedTask;
-        }
+        await inputStream.CopyToAsync(memoryStream);
 
-        public Task<bool> ExistsAsync(string blobKey)
-        {
-            var result = _inMemoryContentStorage.ContainsKey(blobKey);
-            return Task.FromResult(result);
-        }
+        _storage[blobKey] = memoryStream.ToArray();
 
-        public Task<Stream> GetDocumentStreamAsync(string blobKey)
-        {
-            var file = _inMemoryContentStorage[blobKey].OpenReadStream();
-            return Task.FromResult(file);
-        }
+        return blobKey;
+    }
 
-        public Task UpdateDocumentInStorageAsync(string blobKey, IFormFile file)
-        {
-            _inMemoryContentStorage[blobKey] = file;
-            return Task.CompletedTask;
-        }
+    public Task<Stream> GetDocumentStreamAsync(string blobKey)
+    {
+        if (!_storage.TryGetValue(blobKey, out var content))
+            throw new DocumentNotFoundException("Nie znaleziono pliku w magazynie.");
+
+        Stream stream = new MemoryStream(content);
+
+        return Task.FromResult(stream);
+    }
+
+    public Task DeleteAsync(string blobKey)
+    {
+        _storage.Remove(blobKey);
+
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> ExistsAsync(string blobKey)
+    {
+        return Task.FromResult(_storage.ContainsKey(blobKey));
+    }
+
+    public async Task UpdateDocumentInStorageAsync(string blobKey, IFormFile file)
+    {
+        if (!_storage.ContainsKey(blobKey))
+            throw new DocumentNotFoundException("Nie znaleziono pliku w magazynie.");
+
+        await using var inputStream = file.OpenReadStream();
+        using var memoryStream = new MemoryStream();
+
+        await inputStream.CopyToAsync(memoryStream);
+
+        _storage[blobKey] = memoryStream.ToArray();
     }
 }

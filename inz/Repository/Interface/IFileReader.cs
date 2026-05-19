@@ -1,9 +1,8 @@
 ﻿using inz.Models;
 
-namespace inz.Repository.Interface
+namespace inz.Repository.Interface;
+
+public interface IFileReader
 {
-    public interface IFileReader
-    {
-        public Task<DocumentMetadata> ReadFileAsync(IFormFile file);
-    }
+    Task<DocumentMetadata> ReadFileAsync(IFormFile file);
 }
